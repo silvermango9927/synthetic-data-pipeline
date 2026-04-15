@@ -1,0 +1,13 @@
+term,tone,confusable_with,domain,notes
+ma,level,"má(rising),mà(falling),mả(dipping),mã(broken),mạ(heavy)","general","Ghost vs cheek vs but vs grave vs seedling vs rice"
+bán,rising,ban(level),"commerce","Sell vs board/committee"
+bàn,falling,ban(level),"furniture","Table vs board/committee"
+phở,dipping,pho(level),"food","Must preserve dipping tone mark"
+bánh mì,rising+level,,"food","Bread — common client term"
+cà phê,falling+level,,"food","Coffee"
+điện thoại,falling+falling,,"tech","Phone"
+cuộc họp,heavy+heavy,,"business","Meeting"
+báo cáo,rising+rising,,"business","Report"
+thanh toán,level+rising,,"finance","Payment"
+hóa đơn,rising+level,,"finance","Invoice"
+giao hàng,level+falling,,"logistics","Delivery"
