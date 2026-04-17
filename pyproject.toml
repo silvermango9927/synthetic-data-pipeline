@@ -4,11 +4,10 @@ version = "0.1.0"
 description = "Synthetic data generation pipeline for VALSEA ASR finetuning"
 requires-python = ">=3.10"
 dependencies = [
-    "anthropic>=0.40.0",
+    "openai>=1.30.0",
     "httpx>=0.27.0",
     "soundfile>=0.12.1",
     "librosa>=0.10.2",
-    "audiomentations>=0.36.0",
     "jiwer>=3.0.0",
     "numpy>=1.26.0",
     "pandas>=2.2.0",
@@ -18,6 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+augment = [
+    "audiomentations>=0.36.0",  # requires Xcode/clang for numpy-minmax subpackage
+]
 quality = [
     "openai-whisper>=20231117",
     "torch>=2.1.0",
@@ -29,6 +31,10 @@ tts-local = [
 ]
 real-data = [
     "whisperx>=3.1.0",
+]
+prototype = [
+    "edge-tts>=7.0.0",  # Microsoft Neural TTS — no server, no voice bank needed
+    "datasets>=2.19.0",  # HuggingFace datasets for reference sentence grounding
 ]
 dev = [
     "pytest>=8.0.0",

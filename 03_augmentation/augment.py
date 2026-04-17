@@ -1,6 +1,6 @@
 """Apply audio augmentations to make synthetic speech more realistic."""
 import json
-import random
+import shutil
 from pathlib import Path
 
 import click
@@ -19,17 +19,33 @@ try:
         PitchShift,
         TimeStretch,
     )
+    _AUDIOMENTATIONS_AVAILABLE = True
 except ImportError:
-    raise ImportError("pip install audiomentations")
+    _AUDIOMENTATIONS_AVAILABLE = False
 
 
-def build_augmentation_pipeline(noise_bank: str) -> Compose:
-    """Build the augmentation pipeline. Falls back gracefully if noise files missing."""
+def _identity(samples: np.ndarray, sample_rate: int) -> np.ndarray:
+    """No-op augmenter used when audiomentations is not installed."""
+    return samples
+
+
+def build_augmentation_pipeline(noise_bank: str):
+    """Build the augmentation pipeline.
+
+    Falls back to a no-op if audiomentations is not installed, and skips
+    noise/RIR transforms if the noise bank directories are empty.
+    """
+    if not _AUDIOMENTATIONS_AVAILABLE:
+        print(
+            "[WARN] audiomentations not installed — augmentation is a file copy only.\n"
+            "  To enable: sudo xcodebuild -license && pip install -e '.[augment]'"
+        )
+        return _identity
+
     transforms = []
-
     noise_path = Path(noise_bank)
 
-    # Background noise (most important augmentation)
+    # Background noise
     noise_dir = noise_path / "ambient"
     if noise_dir.exists() and list(noise_dir.glob("*.wav")):
         transforms.append(
@@ -70,7 +86,6 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # Find all clean WAVs
     wav_files = list(in_path.glob("*.wav"))
     if not wav_files:
         print(f"[ERROR] No WAV files found in {in_path}")
@@ -78,9 +93,9 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
 
     augmenter = build_augmentation_pipeline(noise_bank)
 
-    # Load clean manifest if exists
+    # Load clean manifest
     clean_manifest_path = in_path / "manifest_clean.jsonl"
-    clean_manifest = {}
+    clean_manifest: dict = {}
     if clean_manifest_path.exists():
         with open(clean_manifest_path) as f:
             for line in f:
@@ -96,7 +111,6 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
 
         if sr != sample_rate:
             import librosa
-
             audio = librosa.resample(audio, orig_sr=sr, target_sr=sample_rate)
             sr = sample_rate
 
@@ -107,8 +121,8 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
             aug_path = out_path / aug_filename
             sf.write(str(aug_path), aug_audio, sr)
 
-            # Build manifest entry
             base_entry = clean_manifest.get(wav_path.name, {})
+            aug_label = "passthrough" if not _AUDIOMENTATIONS_AVAILABLE else f"variant_{v}"
             augmented_manifest.append({
                 "audio_filepath": str(aug_path),
                 "text": base_entry.get("text", ""),
@@ -116,10 +130,9 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
                 "language": base_entry.get("language", ""),
                 "source": "synthetic",
                 "voice_id": base_entry.get("voice_id", ""),
-                "augmentation": f"variant_{v}",
+                "augmentation": aug_label,
             })
 
-    # Write augmented manifest
     manifest_path = out_path / "manifest_augmented.jsonl"
     with open(manifest_path, "w") as f:
         for entry in augmented_manifest:

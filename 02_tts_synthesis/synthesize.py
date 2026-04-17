@@ -1,13 +1,19 @@
 """Synthesize audio from text corpus using TTS."""
+import asyncio
 import hashlib
 import json
 import random
 from pathlib import Path
 
 import click
-import httpx
 import soundfile as sf
 from tqdm import tqdm
+
+# Default edge-tts voices per language (Microsoft Neural TTS, free, no server needed)
+EDGE_VOICES = {
+    "en": ["en-SG-LunaNeural", "en-SG-WayneNeural", "en-US-JennyNeural", "en-US-GuyNeural"],
+    "vi": ["vi-VN-HoaiMyNeural", "vi-VN-NamMinhNeural"],
+}
 
 
 def get_voice_files(voice_bank_dir: str) -> list[Path]:
@@ -16,7 +22,8 @@ def get_voice_files(voice_bank_dir: str) -> list[Path]:
     voices = list(vb.glob("*.wav")) + list(vb.glob("*.mp3")) + list(vb.glob("*.flac"))
     if not voices:
         raise FileNotFoundError(
-            f"No audio files in {vb}. Add reference speaker WAVs (10-30s each)."
+            f"No audio files in {vb}. Add reference speaker WAVs (10-30s each).\n"
+            f"  Tip: use --backend edge for a zero-config prototype (no voice bank needed)."
         )
     return voices
 
@@ -29,6 +36,8 @@ def synthesize_fish_speech(
     language: str = "en",
 ) -> bool:
     """Synthesize using Fish Speech S2 API (local or cloud)."""
+    import httpx
+
     try:
         with open(voice_path, "rb") as f:
             resp = httpx.post(
@@ -73,6 +82,44 @@ def synthesize_xtts(
     return True
 
 
+def synthesize_edge_tts(
+    text: str,
+    voice: str,
+    output_path: Path,
+) -> bool:
+    """Synthesize using Microsoft Edge TTS (free, no server or voice bank needed).
+
+    Install: pip install edge-tts
+    Voices: https://speech.microsoft.com/portal/voicegallery
+    """
+    try:
+        import edge_tts
+    except ImportError:
+        raise ImportError("pip install edge-tts  # or: pip install -e '.[prototype]'")
+
+    async def _run() -> None:
+        communicate = edge_tts.Communicate(text, voice)
+        # edge-tts outputs MP3; soundfile needs WAV — save to tmp then convert
+        tmp_path = output_path.with_suffix(".mp3")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        await communicate.save(str(tmp_path))
+
+        # Convert MP3 → WAV at 16kHz mono
+        import librosa
+        import numpy as np
+
+        audio, sr = librosa.load(str(tmp_path), sr=16000, mono=True)
+        sf.write(str(output_path), audio, sr)
+        tmp_path.unlink(missing_ok=True)
+
+    try:
+        asyncio.run(_run())
+        return True
+    except Exception as e:
+        print(f"[ERROR] edge-tts failed for voice {voice!r}: {e}")
+        return False
+
+
 def make_output_filename(text: str, voice_id: str, idx: int) -> str:
     text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
     return f"synth_{idx:06d}_{voice_id}_{text_hash}.wav"
@@ -80,11 +127,20 @@ def make_output_filename(text: str, voice_id: str, idx: int) -> str:
 
 @click.command()
 @click.option("--corpus", required=True, help="Input JSONL corpus path")
-@click.option("--voice-bank", required=True, help="Directory of reference speaker WAVs")
+@click.option(
+    "--voice-bank",
+    default="",
+    help="Directory of reference speaker WAVs (not needed for --backend edge)",
+)
 @click.option("--output-dir", required=True, help="Output directory for WAVs")
-@click.option("--lang", default="en", help="Language code (en for Singlish, vi for Vietnamese)")
+@click.option("--lang", default="en", help="Language code: en (Singlish) or vi (Vietnamese)")
 @click.option("--voices-per-sentence", default=3, help="Number of voice variants per sentence")
-@click.option("--backend", default="fish", type=click.Choice(["fish", "xtts"]))
+@click.option(
+    "--backend",
+    default="fish",
+    type=click.Choice(["fish", "xtts", "edge"]),
+    help="TTS backend. 'edge' requires no server or voice bank.",
+)
 @click.option("--api-url", default="http://localhost:8080/v1/tts", help="Fish Speech API URL")
 @click.option("--max-sentences", default=None, type=int, help="Limit sentences to process")
 def main(
@@ -97,8 +153,17 @@ def main(
     api_url: str,
     max_sentences: int | None,
 ):
-    voices = get_voice_files(voice_bank)
-    print(f"Found {len(voices)} voice profiles in {voice_bank}")
+    # --- resolve voice pool ---
+    if backend == "edge":
+        lang_key = lang.split("-")[0]  # "en-SG" → "en"
+        edge_voices = EDGE_VOICES.get(lang_key, EDGE_VOICES["en"])
+        voices: list = edge_voices
+        print(f"edge-tts backend: using {len(voices)} voices for lang={lang!r}")
+    else:
+        if not voice_bank:
+            raise click.UsageError("--voice-bank is required for fish and xtts backends.")
+        voices = get_voice_files(voice_bank)
+        print(f"Found {len(voices)} voice profiles in {voice_bank}")
 
     # Load corpus
     sentences = []
@@ -109,9 +174,10 @@ def main(
     if max_sentences:
         sentences = sentences[:max_sentences]
 
+    n_voices = min(voices_per_sentence, len(voices))
     print(
-        f"Synthesizing {len(sentences)} sentences × {voices_per_sentence} voices = "
-        f"{len(sentences) * voices_per_sentence} audio files"
+        f"Synthesizing {len(sentences)} sentences × {n_voices} voices = "
+        f"{len(sentences) * n_voices} audio files"
     )
 
     out = Path(output_dir)
@@ -121,17 +187,24 @@ def main(
 
     for idx, item in enumerate(tqdm(sentences)):
         text = item["text"]
-        selected_voices = random.sample(voices, k=min(voices_per_sentence, len(voices)))
+        selected = random.sample(voices, k=n_voices)
 
-        for voice_path in selected_voices:
-            voice_id = voice_path.stem
-            filename = make_output_filename(text, voice_id, idx)
-            output_path = out / filename
-
-            if backend == "fish":
-                ok = synthesize_fish_speech(text, voice_path, output_path, api_url, lang)
-            else:
-                ok = synthesize_xtts(text, voice_path, output_path, lang)
+        for voice in selected:
+            if backend == "edge":
+                voice_id = voice.replace("-", "_")
+                filename = make_output_filename(text, voice_id, idx)
+                output_path = out / filename
+                ok = synthesize_edge_tts(text, voice, output_path)
+            elif backend == "fish":
+                voice_id = voice.stem
+                filename = make_output_filename(text, voice_id, idx)
+                output_path = out / filename
+                ok = synthesize_fish_speech(text, voice, output_path, api_url, lang)
+            else:  # xtts
+                voice_id = voice.stem
+                filename = make_output_filename(text, voice_id, idx)
+                output_path = out / filename
+                ok = synthesize_xtts(text, voice, output_path, lang)
 
             if ok and output_path.exists():
                 info = sf.info(str(output_path))
