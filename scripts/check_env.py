@@ -4,6 +4,12 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # loads OPENAI_API_KEY from .env if present
+except ImportError:
+    pass
+
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 RED = "\033[31m"

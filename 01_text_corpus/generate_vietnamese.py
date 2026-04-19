@@ -12,6 +12,9 @@ try:
 except ImportError:
     raise ImportError("pip install openai")
 
+from dotenv import load_dotenv
+load_dotenv()  # loads OPENAI_API_KEY from .env if present
+
 MODEL = "gpt-4.1"
 # Real Vietnamese transcripts from the VIVOS corpus (AILAB, VNUHCM).
 # 15 hours of native speech across 50+ speakers, CC BY-NC-SA 4.0.
@@ -35,20 +38,17 @@ def load_reference_sentences(dataset_id: str, max_samples: int) -> list[str]:
 
     print(f"Loading reference dataset: {dataset_id} ...")
     try:
-        ds = load_dataset(dataset_id, split="train", trust_remote_code=True)
+        ds = load_dataset(dataset_id, split="train")
     except Exception as e:
         print(f"[WARN] Could not load {dataset_id}: {e}")
         print("       Continuing without reference grounding.")
         return []
 
-    # vivos uses "sentence"; try common alternatives for other datasets
+    # Access the text column directly (avoids decoding audio columns)
     for col in ("sentence", "transcription", "text", "transcript", "normalized_text"):
         if col in ds.column_names:
-            sentences = [
-                row[col]
-                for row in ds
-                if isinstance(row[col], str) and len(row[col].strip()) > 8
-            ]
+            raw = ds[col]  # returns list[str] without touching audio
+            sentences = [s for s in raw if isinstance(s, str) and len(s.strip()) > 8]
             sentences = sentences[:max_samples]
             print(f"  Loaded {len(sentences)} reference sentences (column: '{col}')")
             return sentences

@@ -35,6 +35,7 @@ real-data = [
 prototype = [
     "edge-tts>=7.0.0",  # Microsoft Neural TTS — no server, no voice bank needed
     "datasets>=2.19.0",  # HuggingFace datasets for reference sentence grounding
+    "python-dotenv>=1.0.0",  # Load OPENAI_API_KEY from .env file
 ]
 dev = [
     "pytest>=8.0.0",

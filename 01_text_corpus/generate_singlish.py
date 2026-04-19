@@ -12,6 +12,9 @@ try:
 except ImportError:
     raise ImportError("pip install openai")
 
+from dotenv import load_dotenv
+load_dotenv()  # loads OPENAI_API_KEY from .env if present
+
 MODEL = "gpt-4.1"
 # Real Singlish transcripts from the National Speech Corpus (NSC) via HuggingFace.
 # Used as few-shot grounding so GPT doesn't hallucinate register or vocabulary.
@@ -34,20 +37,17 @@ def load_reference_sentences(dataset_id: str, max_samples: int) -> list[str]:
 
     print(f"Loading reference dataset: {dataset_id} ...")
     try:
-        ds = load_dataset(dataset_id, split="train", trust_remote_code=True)
+        ds = load_dataset(dataset_id, split="train")
     except Exception as e:
         print(f"[WARN] Could not load {dataset_id}: {e}")
         print("       Continuing without reference grounding.")
         return []
 
-    # Try common transcript column names used by NSC-derived HF datasets
+    # Access the text column directly (avoids decoding audio columns)
     for col in ("sentence", "transcription", "text", "transcript", "normalized_text"):
         if col in ds.column_names:
-            sentences = [
-                row[col]
-                for row in ds
-                if isinstance(row[col], str) and len(row[col].strip()) > 8
-            ]
+            raw = ds[col]  # returns list[str] without touching audio
+            sentences = [s for s in raw if isinstance(s, str) and len(s.strip()) > 8]
             sentences = sentences[:max_samples]
             print(f"  Loaded {len(sentences)} reference sentences (column: '{col}')")
             return sentences
