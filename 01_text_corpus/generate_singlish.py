@@ -43,10 +43,10 @@ def load_reference_sentences(dataset_id: str, max_samples: int) -> list[str]:
         print("       Continuing without reference grounding.")
         return []
 
-    # Access the text column directly (avoids decoding audio columns)
+    # Find the text column, then select only that column to avoid audio decoding
     for col in ("sentence", "transcription", "text", "transcript", "normalized_text"):
         if col in ds.column_names:
-            raw = ds[col]  # returns list[str] without touching audio
+            raw = ds.select_columns([col])[col]  # drops audio column first
             sentences = [s for s in raw if isinstance(s, str) and len(s.strip()) > 8]
             sentences = sentences[:max_samples]
             print(f"  Loaded {len(sentences)} reference sentences (column: '{col}')")

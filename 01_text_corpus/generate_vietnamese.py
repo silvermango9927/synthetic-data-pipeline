@@ -16,10 +16,10 @@ from dotenv import load_dotenv
 load_dotenv()  # loads OPENAI_API_KEY from .env if present
 
 MODEL = "gpt-4.1"
-# Real Vietnamese transcripts from the VIVOS corpus (AILAB, VNUHCM).
-# 15 hours of native speech across 50+ speakers, CC BY-NC-SA 4.0.
+# Real Vietnamese transcripts from InfoRe Technology (CC-BY-4.0, 25 hrs).
+# Parquet-based, loads without audio decoding issues.
 # Used as few-shot grounding so GPT doesn't hallucinate diacritics or phrasing.
-REFERENCE_DATASET = "vivos"
+REFERENCE_DATASET = "doof-ferb/infore1_25hours"
 REFERENCE_MAX_SAMPLES = 3000
 
 
@@ -36,25 +36,37 @@ def load_reference_sentences(dataset_id: str, max_samples: int) -> list[str]:
         print("       pip install -e '.[prototype]'")
         return []
 
-    print(f"Loading reference dataset: {dataset_id} ...")
+    print(f"Loading reference dataset: {dataset_id} (streaming, text only) ...")
     try:
-        ds = load_dataset(dataset_id, split="train")
+        ds = load_dataset(dataset_id, split="train", streaming=True)
     except Exception as e:
         print(f"[WARN] Could not load {dataset_id}: {e}")
         print("       Continuing without reference grounding.")
         return []
 
-    # Access the text column directly (avoids decoding audio columns)
+    # Find the text column, then select only that column to avoid audio decoding
+    text_col = None
     for col in ("sentence", "transcription", "text", "transcript", "normalized_text"):
         if col in ds.column_names:
-            raw = ds[col]  # returns list[str] without touching audio
-            sentences = [s for s in raw if isinstance(s, str) and len(s.strip()) > 8]
-            sentences = sentences[:max_samples]
-            print(f"  Loaded {len(sentences)} reference sentences (column: '{col}')")
-            return sentences
+            text_col = col
+            break
 
-    print(f"[WARN] No recognised text column in {dataset_id}. Columns: {ds.column_names}")
-    return []
+    if text_col is None:
+        print(f"[WARN] No recognised text column in {dataset_id}. Columns: {ds.column_names}")
+        return []
+
+    ds = ds.select_columns([text_col])  # drop audio column — avoids torchcodec dependency
+
+    sentences = []
+    for row in ds:
+        val = row[text_col]
+        if isinstance(val, str) and len(val.strip()) > 8:
+            sentences.append(val)
+        if len(sentences) >= max_samples:
+            break
+
+    print(f"  Loaded {len(sentences)} reference sentences (column: '{text_col}')")
+    return sentences
 
 
 def load_lexicon(path: str) -> list[dict]:

@@ -1,13 +1,3 @@
-outputs/singlish/clean/
-outputs/singlish/augmented/
-outputs/vietnamese/clean/
-outputs/vietnamese/augmented/
-03_augmentation/noise_bank/*.wav
-03_augmentation/noise_bank/ambient/
-03_augmentation/noise_bank/rir/
-02_tts_synthesis/voice_bank/**/*.wav
-02_tts_synthesis/voice_bank/**/*.mp3
-02_tts_synthesis/voice_bank/**/*.flac
 __pycache__/
 *.egg-info/
 .venv/
