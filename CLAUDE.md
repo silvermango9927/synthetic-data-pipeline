@@ -41,7 +41,11 @@ Selected via `--length-target {short,long}` on `01_text_corpus/generate_{chinese
   .venv/bin/pip install -e ".[prototype,tts-cloud]"
   ```
 - **`make` is broken** on this machine (Xcode license not accepted). Use `bash scripts/run_prototype*.sh` or call `.venv/bin/python` directly.
-- **`audiomentations`** install fails until `sudo xcodebuild -license` is run (numpy-minmax compile). Pipeline falls back to pass-through if unavailable.
+- **`audiomentations` on Apple Silicon**: pin to `<0.36`. Versions ≥0.36 pull `numpy-minmax`, which has a buggy `IS_X86_64` macro that tries to compile AVX intrinsics on arm64 and fails. The Xcode license is unrelated — accepting it does not fix this. Install with:
+  ```bash
+  .venv/bin/pip install 'audiomentations<0.36' pydub
+  ```
+  `pydub` is needed for `Mp3Compression` and shells out to `ffmpeg` (already at `/opt/homebrew/bin/ffmpeg`). Without these, `03_augmentation/augment.py` falls back to pass-through (literal file copies). On x86_64 the upstream extras (`pip install -e '.[augment]'`) may work, but on this arm64 box do not use it.
 - **GPU**: required for fast UTMOS, Whisper-large-v3-turbo, and Qwen2-Audio-7B QC. Qwen2-Audio needs ~14 GB VRAM.
 
 ## API keys (in `.env`, gitignored)
@@ -63,7 +67,7 @@ Loaded automatically via `python-dotenv` at script entry.
 |---|---|---|
 | 01 Text corpus | `01_text_corpus/generate_{singlish,vietnamese,chinese,hindi}.py` | OpenAI gpt-4.1 + few-shot reference + lexicon. Outputs JSONL. |
 | 02 TTS synthesis | `02_tts_synthesis/synthesize.py` | Backends: `edge`, `fish`, `xtts`, `qwen`, `minimax`, `sarvam`. Selected via `--backend`. |
-| 03 Augmentation | `03_augmentation/augment.py` | Language-agnostic. Adds noise, RIR, time-stretch, pitch, MP3 codec. |
+| 03 Augmentation | `03_augmentation/augment.py` | Language-agnostic. Time-stretch, pitch, gain, bandpass, MP3 codec; noise/RIR if `noise_bank/{ambient,rir}` populated. Requires `audiomentations<0.36` + `pydub`; otherwise pass-through. Fallback: `scripts/augment_simple.py` (no audiomentations dep). |
 | 04 Quality filter | `04_quality_filter/filter.py` | 3 layers: duration sanity + UTMOS + roundtrip WER. `--qc-asr` selects whisper or qwen2-audio. |
 | 05 Real-data curation | `05_real_data_curation/` | Placeholder (unimplemented). |
 | 06 Export | `06_dataset_export/export_nemo_manifest.py` | Strips metadata to NeMo JSONL `{audio_filepath, text, duration}`. |
@@ -104,6 +108,27 @@ outputs/<lang>/
   long/{...}
 ```
 
+### Augmentation only (re-run stage 03)
+
+Once `audiomentations<0.36` + `pydub` are installed (see Environment), augment a bucket like:
+```bash
+.venv/bin/python 03_augmentation/augment.py \
+  --input-dir outputs/chinese/short/clean \
+  --output-dir outputs/chinese/short/augmented \
+  --variants 2
+```
+- Default 2 variants per clean clip. WAVs land alongside the clean ones; `manifest_augmented.jsonl` records `variant_0` / `variant_1`.
+- Verify it actually augmented (vs silently passing through): `grep -c '"augmentation": "passthrough"' outputs/<lang>/<bucket>/augmented/manifest_augmented.jsonl` should return `0`.
+- Empty `noise_bank/{ambient,rir}` means noise + reverb stages are skipped (warning, not error). Drop MUSAN into `03_augmentation/noise_bank/ambient/` and RIRS_NOISES into `03_augmentation/noise_bank/rir/` to enable them.
+
+No-deps fallback (when audiomentations won't install): `scripts/augment_simple.py` mirrors the non-noise/non-RIR transforms using only librosa + scipy + numpy. Same CLI shape:
+```bash
+.venv/bin/python scripts/augment_simple.py \
+  --input-dir outputs/<lang>/<bucket>/clean \
+  --output-dir outputs/<lang>/<bucket>/augmented_real \
+  --variants 2 --limit 10
+```
+
 ## Adding a new language (6-step checklist)
 
 1. Add to `Language` enum in `scripts/config.py:8-12`.
@@ -123,7 +148,8 @@ outputs/<lang>/
 
 ## Known issues / tripwires
 
-- `audiomentations` fails to install pre-Xcode-license. The pipeline degrades gracefully (pass-through) if it's missing.
+- `audiomentations` ≥0.36 fails to install on Apple Silicon (numpy-minmax AVX/arm64 bug — *not* an Xcode license issue, despite the install spam). Pin `audiomentations<0.36`. Pipeline degrades to pass-through (literal file copies labeled `"augmentation": "passthrough"`) if the import fails — silent, easy to miss. Always grep the augmented manifest after stage 03 to confirm.
+- `Mp3Compression` in audiomentations requires `pydub` + `ffmpeg`. Without `pydub` the whole `Compose` raises mid-loop, leaving the augmented dir in a partial state (manifest never written). Install pydub before running.
 - AISHELL streaming download is large; first run pulls metadata. Use `--skip-reference` for offline iteration.
 - FLEURS `hi_in` config name uses underscore (`hi_in`), not hyphen.
 - Sarvam max 2,500 chars per call — long-form Hindi (~110 words ≈ 600 chars) fits fine.
