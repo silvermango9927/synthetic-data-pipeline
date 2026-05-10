@@ -87,14 +87,78 @@ def roundtrip_wer(audio_path: str, expected_text: str, language: str) -> float:
         return 1.0
 
 
+def roundtrip_wer_qwen2_audio(audio_path: str, expected_text: str, language: str) -> float:
+    """Transcribe audio with Qwen2-Audio-7B-Instruct and compute WER.
+
+    Used for Chinese QC roundtrip when the downstream ASR target is Qwen2-Audio.
+    Requires ~14GB VRAM. Lazy-loads on first call.
+    """
+    try:
+        import jiwer
+        import torch
+        from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
+        if not hasattr(roundtrip_wer_qwen2_audio, "_model"):
+            print("Loading Qwen/Qwen2-Audio-7B-Instruct... (first call only, ~14GB VRAM)")
+            model_id = "Qwen/Qwen2-Audio-7B-Instruct"
+            roundtrip_wer_qwen2_audio._processor = AutoProcessor.from_pretrained(model_id)
+            roundtrip_wer_qwen2_audio._model = Qwen2AudioForConditionalGeneration.from_pretrained(
+                model_id, device_map="auto", torch_dtype=torch.float16
+            )
+
+        processor = roundtrip_wer_qwen2_audio._processor
+        model = roundtrip_wer_qwen2_audio._model
+
+        audio, sr = sf.read(audio_path, dtype="float32")
+        if sr != 16000:
+            import librosa
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+
+        prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Transcribe the speech."
+        inputs = processor(
+            text=prompt, audios=audio, sampling_rate=16000, return_tensors="pt", padding=True
+        ).to(model.device)
+
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, max_new_tokens=256)
+        generated_ids = generated_ids[:, inputs.input_ids.size(1):]
+        hypothesis = processor.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0].strip()
+
+        wer = jiwer.wer(expected_text.strip(), hypothesis)
+        return float(wer)
+    except Exception as e:
+        print(f"[WARN] Qwen2-Audio roundtrip failed: {e}. Returning 1.0 (worst).")
+        return 1.0
+
+
+WER_THRESHOLDS = {"vi": 0.15, "en": 0.25, "zh": 0.20, "hi": 0.25}
+
+
 @click.command()
 @click.option("--input-dir", required=True, help="Directory containing clean/ and augmented/ subdirs")
 @click.option("--output", required=True, help="Output filtered manifest JSONL")
-@click.option("--lang", required=True, help="Language code: en or vi")
+@click.option("--lang", required=True, help="Language code: en, vi, zh, or hi")
 @click.option("--utmos-threshold", default=3.5, help="Minimum UTMOS score")
-@click.option("--wer-threshold", default=None, type=float, help="Max WER (auto: 0.15 vi, 0.25 en)")
+@click.option(
+    "--wer-threshold",
+    default=None,
+    type=float,
+    help="Max WER (auto per-language: vi 0.15, en 0.25, zh 0.20, hi 0.25)",
+)
 @click.option("--skip-utmos", is_flag=True, help="Skip UTMOS scoring (faster, less filtering)")
-@click.option("--skip-whisper", is_flag=True, help="Skip ASR roundtrip (faster, less filtering)")
+@click.option(
+    "--skip-whisper",
+    is_flag=True,
+    help="Skip ASR roundtrip (faster, less filtering). Applies to whichever --qc-asr is selected.",
+)
+@click.option(
+    "--qc-asr",
+    type=click.Choice(["whisper", "qwen2-audio"]),
+    default="whisper",
+    help="ASR model used for the roundtrip WER check. qwen2-audio aligns with Chinese training target.",
+)
 def main(
     input_dir: str,
     output: str,
@@ -103,9 +167,10 @@ def main(
     wer_threshold: float | None,
     skip_utmos: bool,
     skip_whisper: bool,
+    qc_asr: str,
 ):
     if wer_threshold is None:
-        wer_threshold = 0.15 if lang == "vi" else 0.25
+        wer_threshold = WER_THRESHOLDS.get(lang, 0.25)
 
     in_path = Path(input_dir)
 
@@ -149,11 +214,15 @@ def main(
 
         # Layer 3: ASR roundtrip
         if not skip_whisper:
-            wer = roundtrip_wer(audio_path, text, lang)
+            if qc_asr == "qwen2-audio":
+                wer = roundtrip_wer_qwen2_audio(audio_path, text, lang)
+            else:
+                wer = roundtrip_wer(audio_path, text, lang)
             if wer > wer_threshold:
                 rejected["wer"] += 1
                 continue
             entry["roundtrip_wer"] = wer
+            entry["qc_asr"] = qc_asr
 
         passed.append(entry)
 

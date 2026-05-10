@@ -7,3 +7,8 @@ __pycache__/
 .env
 outputs/**/*.jsonl
 outputs/**/*.json
+# Don't track generated audio for new languages — too large for review.
+# Singlish + Vietnamese audio is grandfathered in (committed before zh/hi scale-up).
+outputs/chinese/
+outputs/hindi/
+.claude/
