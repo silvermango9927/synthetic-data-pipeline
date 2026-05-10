@@ -8,6 +8,8 @@ from pydantic import BaseModel
 class Language(str, Enum):
     SINGLISH = "en"
     VIETNAMESE = "vi"
+    CHINESE = "zh"
+    HINDI = "hi"
 
 
 class SampleMetadata(BaseModel):
@@ -35,6 +37,8 @@ class PipelineConfig(BaseModel):
     utmos_threshold: float = 3.5
     wer_threshold_vi: float = 0.15
     wer_threshold_en: float = 0.25
+    wer_threshold_zh: float = 0.20
+    wer_threshold_hi: float = 0.25
 
     # Augmentation
     augmentation_variants: int = 2  # augmented copies per clean sample
