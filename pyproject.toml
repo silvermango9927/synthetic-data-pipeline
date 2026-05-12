@@ -38,9 +38,10 @@ prototype = [
     "python-dotenv>=1.0.0",  # Load OPENAI_API_KEY from .env file
 ]
 tts-cloud = [
-    "dashscope>=1.20.0",  # Alibaba DashScope SDK (Qwen TTS)
-    "sarvamai>=0.1.0",     # Sarvam AI Python SDK (Hindi bulbul:v3)
-    "soxr>=0.5.0",         # high-quality resampler (24kHz Qwen → 16kHz mono)
+    "dashscope>=1.20.0",      # Alibaba DashScope SDK (Qwen TTS)
+    "sarvamai>=0.1.0",        # Sarvam AI Python SDK (Hindi bulbul:v3)
+    "soxr>=0.5.0",            # high-quality resampler (24kHz Qwen → 16kHz mono)
+    "huggingface_hub>=1.0.0", # HF Datasets push (07_hf_push)
 ]
 dev = [
     "pytest>=8.0.0",
