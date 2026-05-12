@@ -403,6 +403,44 @@ def make_output_filename(text: str, voice_id: str, idx: int) -> str:
     return f"synth_{idx:06d}_{voice_id}_{text_hash}.wav"
 
 
+def voice_id_for(backend: str, voice) -> str:
+    """Map a (backend, voice) pair to the manifest voice_id string."""
+    if backend == "edge":
+        return voice.replace("-", "_")
+    if backend == "qwen":
+        return f"qwen_{voice}"
+    if backend == "minimax":
+        short = voice.split("_", 1)[-1] if "_" in voice else voice
+        return f"minimax_{short}".replace(" ", "_").replace("(", "").replace(")", "")
+    if backend == "sarvam":
+        return f"sarvam_{voice}"
+    # fish / xtts — voice is a Path
+    return voice.stem if hasattr(voice, "stem") else str(voice)
+
+
+def rotate_voices(sentence_idx: int, n_voices: int, pool: list) -> list:
+    """Deterministically pick `n_voices` voices from `pool` for the given sentence index.
+
+    Round-robin offset by sentence_idx so every voice gets equal coverage across the run.
+    """
+    if n_voices >= len(pool):
+        return list(pool)
+    start = (sentence_idx * n_voices) % len(pool)
+    return [pool[(start + k) % len(pool)] for k in range(n_voices)]
+
+
+def _is_valid_wav(path: Path, min_bytes: int = 1024) -> bool:
+    """A WAV file counts as 'already synthesised' iff it exists, is non-trivially sized,
+    and soundfile can read its header. Used for --resume."""
+    try:
+        if not path.exists() or path.stat().st_size < min_bytes:
+            return False
+        info = sf.info(str(path))
+        return info.frames > 0
+    except Exception:
+        return False
+
+
 @click.command()
 @click.option("--corpus", required=True, help="Input JSONL corpus path")
 @click.option(
@@ -426,6 +464,18 @@ def make_output_filename(text: str, voice_id: str, idx: int) -> str:
 )
 @click.option("--api-url", default="http://localhost:8080/v1/tts", help="Fish Speech API URL")
 @click.option("--max-sentences", default=None, type=int, help="Limit sentences to process")
+@click.option(
+    "--workers",
+    default=1,
+    type=int,
+    help="Concurrent TTS calls. 1 = sequential (default). 4–8 is a good range for "
+         "edge-tts / Sarvam at bulk scale; over 8 risks rate-limits.",
+)
+@click.option(
+    "--resume/--no-resume",
+    default=True,
+    help="Skip (sentence, voice) pairs whose WAV already exists on disk. Default on.",
+)
 def main(
     corpus: str,
     voice_bank: str,
@@ -435,6 +485,8 @@ def main(
     backend: str,
     api_url: str,
     max_sentences: int | None,
+    workers: int,
+    resume: bool,
 ):
     # --- resolve voice pool ---
     if backend == "edge":
@@ -469,74 +521,108 @@ def main(
     n_voices = min(voices_per_sentence, len(voices))
     print(
         f"Synthesizing {len(sentences)} sentences × {n_voices} voices = "
-        f"{len(sentences) * n_voices} audio files"
+        f"{len(sentences) * n_voices} audio files "
+        f"(workers={workers}, resume={resume})"
     )
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    manifest = []
-
-    for idx, item in enumerate(tqdm(sentences)):
+    # --- Build the full job list deterministically (sentence_idx × voice rotation).
+    # Each job is a tuple (idx, item, voice, voice_id, output_path).
+    jobs = []
+    for idx, item in enumerate(sentences):
         text = item["text"]
-        selected = random.sample(voices, k=n_voices)
-
+        selected = rotate_voices(idx, n_voices, voices)
         for voice in selected:
-            if backend == "edge":
-                voice_id = voice.replace("-", "_")
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                ok = synthesize_edge_tts(text, voice, output_path)
-            elif backend == "qwen":
-                voice_id = f"qwen_{voice}"
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                ok = synthesize_qwen_tts(text, voice, output_path)
-            elif backend == "minimax":
-                # Sanitize "Chinese (Mandarin)_News_Anchor" → "minimax_News_Anchor"
-                short_voice = voice.split("_", 1)[-1] if "_" in voice else voice
-                voice_id = f"minimax_{short_voice}".replace(" ", "_").replace("(", "").replace(")", "")
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                ok = synthesize_minimax_tts(text, voice, output_path)
-            elif backend == "sarvam":
-                voice_id = f"sarvam_{voice}"
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                lang_code = "hi-IN" if lang.startswith("hi") else lang
-                ok = synthesize_sarvam_tts(
-                    text, voice, output_path, target_language_code=lang_code
-                )
-            elif backend == "fish":
-                voice_id = voice.stem
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                ok = synthesize_fish_speech(text, voice, output_path, api_url, lang)
-            else:  # xtts
-                voice_id = voice.stem
-                filename = make_output_filename(text, voice_id, idx)
-                output_path = out / filename
-                ok = synthesize_xtts(text, voice, output_path, lang)
+            vid = voice_id_for(backend, voice)
+            filename = make_output_filename(text, vid, idx)
+            jobs.append((idx, item, voice, vid, out / filename))
 
-            if ok and output_path.exists():
-                info = sf.info(str(output_path))
-                manifest.append({
-                    "audio_filepath": str(output_path),
-                    "text": text,
-                    "duration": info.duration,
-                    "language": item.get("language", lang),
-                    "source": "synthetic",
-                    "voice_id": voice_id,
-                    "augmentation": None,
-                })
+    # Resume: split into skip (already done) vs to-do.
+    todo, skipped = [], []
+    for job in jobs:
+        if resume and _is_valid_wav(job[4]):
+            skipped.append(job)
+        else:
+            todo.append(job)
+    if skipped:
+        print(f"  resume: skipping {len(skipped)} jobs whose WAVs already exist")
 
-    # Write manifest
+    # Worker function — returns the manifest entry (or None on failure).
+    def _do_job(job):
+        idx, item, voice, vid, output_path = job
+        text = item["text"]
+        if backend == "edge":
+            ok = synthesize_edge_tts(text, voice, output_path)
+        elif backend == "qwen":
+            ok = synthesize_qwen_tts(text, voice, output_path)
+        elif backend == "minimax":
+            ok = synthesize_minimax_tts(text, voice, output_path)
+        elif backend == "sarvam":
+            lang_code = "hi-IN" if lang.startswith("hi") else lang
+            ok = synthesize_sarvam_tts(text, voice, output_path, target_language_code=lang_code)
+        elif backend == "fish":
+            ok = synthesize_fish_speech(text, voice, output_path, api_url, lang)
+        else:  # xtts
+            ok = synthesize_xtts(text, voice, output_path, lang)
+        if not (ok and output_path.exists()):
+            return None
+        try:
+            info = sf.info(str(output_path))
+        except Exception:
+            return None
+        return {
+            "audio_filepath": str(output_path),
+            "text": text,
+            "duration": info.duration,
+            "language": item.get("language", lang),
+            "source": "synthetic",
+            "voice_id": vid,
+            "augmentation": None,
+        }
+
+    # Manifest is append-only across runs so resumed runs don't lose history.
+    # We rebuild it from disk at the end to dedup and drop entries for missing WAVs.
     manifest_path = out / "manifest_clean.jsonl"
+    new_entries = 0
+    with open(manifest_path, "a", buffering=1) as mf:  # line-buffered append
+        if workers <= 1:
+            for job in tqdm(todo, desc="tts"):
+                entry = _do_job(job)
+                if entry is not None:
+                    mf.write(json.dumps(entry) + "\n")
+                    new_entries += 1
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                futures = {ex.submit(_do_job, job): job for job in todo}
+                for fut in tqdm(as_completed(futures), total=len(futures), desc="tts"):
+                    entry = fut.result()
+                    if entry is not None:
+                        mf.write(json.dumps(entry) + "\n")
+                        new_entries += 1
+
+    # Rebuild manifest: dedup by audio_filepath, keep only entries whose WAV is on disk.
+    seen = {}
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                p = e.get("audio_filepath")
+                if p and Path(p).exists():
+                    seen[p] = e
     with open(manifest_path, "w") as f:
-        for entry in manifest:
+        for entry in seen.values():
             f.write(json.dumps(entry) + "\n")
 
-    print(f"Synthesized {len(manifest)} audio files. Manifest: {manifest_path}")
+    print(
+        f"Synthesized {new_entries} new audio files (skipped {len(skipped)} resumed). "
+        f"Manifest now has {len(seen)} entries: {manifest_path}"
+    )
 
 
 if __name__ == "__main__":
