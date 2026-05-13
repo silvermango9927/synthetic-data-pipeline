@@ -6,16 +6,24 @@ Layout pushed to the HF repo (one repo per language):
       data/short_clean/audio/*.wav
       data/short_clean/manifest.jsonl       # train rows
       data/short_clean/val.jsonl            # 5% held-out
-      data/short_aug/audio/*.wav
-      data/short_aug/manifest.jsonl
-      data/short_aug/val.jsonl
+      data/short_augmented/audio/*.wav
+      data/short_augmented/manifest.jsonl
+      data/short_augmented/val.jsonl
       data/long_clean/...
-      data/long_aug/...
-      README.md                              # dataset card
+      data/long_augmented/...
+      README.md                              # dataset card with `configs:` + `dataset_info:`
 
-The manifest schema (NeMo-compatible plus a few metadata cols):
+Each `(bucket, aug_state)` pair is exposed as a HF datasets config, so:
 
-    {"audio_filepath": "audio/<filename>.wav",
+    datasets.load_dataset("valsea/synthetic-asr-zh", "short_clean")
+
+returns a `DatasetDict` with `train` + `val` splits and the `audio` column auto-decoded
+to a 16 kHz waveform (declared as `Audio(sampling_rate=16000)` in the README YAML).
+
+The manifest schema (NeMo-compatible plus HF-canonical `audio` column):
+
+    {"audio": "audio/<filename>.wav",          # auto-cast to Audio() by HF
+     "audio_filepath": "audio/<filename>.wav", # kept for NeMo training scripts
      "text": "...",
      "duration": 4.35,
      "language": "hi",
@@ -113,10 +121,14 @@ def stage_split(
             link.unlink()
         os.symlink(src.resolve(), link)
 
-        # Rewrite audio_filepath to repo-relative path
+        # Rewrite audio path to repo-relative. Two columns:
+        #   audio          → cast to Audio(sampling_rate=16000) by HF (declared in README YAML)
+        #   audio_filepath → unchanged NeMo column, same string value
+        repo_path = f"audio/{wav_name}"
         new_entry = dict(entry)
-        new_entry["audio_filepath"] = f"audio/{wav_name}"
-        if stable_val_flag(new_entry["audio_filepath"], val_fraction):
+        new_entry["audio"] = repo_path
+        new_entry["audio_filepath"] = repo_path
+        if stable_val_flag(repo_path, val_fraction):
             val_rows.append(new_entry)
         else:
             train_rows.append(new_entry)
@@ -137,21 +149,100 @@ def stage_split(
     }
 
 
+def _size_category(total_rows: int) -> str:
+    if total_rows < 1_000:
+        return "n<1K"
+    if total_rows < 10_000:
+        return "1K<n<10K"
+    if total_rows < 100_000:
+        return "10K<n<100K"
+    if total_rows < 1_000_000:
+        return "100K<n<1M"
+    return "1M<n<10M"
+
+
 def write_readme(staging_root: Path, lang: str, bucket_stats: dict) -> None:
-    """Dataset card."""
+    """Dataset card with `configs:` + `dataset_info:` so HF auto-decodes audio.
+
+    Each `(bucket, aug_state)` becomes a loadable config:
+
+        datasets.load_dataset("<repo>", "short_clean")
+
+    `dataset_info.features` declares `audio` as `Audio(sampling_rate=16000)`, which
+    is what makes `ds["train"][0]["audio"]` return a decoded waveform instead of
+    a bare path string.
+    """
     total_hours = sum(s["total_seconds"] for s in bucket_stats.values()) / 3600
-    lines = [
+    total_rows = sum(s["train"] + s["val"] for s in bucket_stats.values())
+
+    # Deterministic bucket order for stable card output (short before long, clean before augmented).
+    bucket_order = {"short": 0, "long": 1}
+    aug_order = {"clean": 0, "augmented": 1}
+    ordered = sorted(
+        bucket_stats.items(),
+        key=lambda kv: (bucket_order.get(kv[0][0], 99), aug_order.get(kv[0][1], 99)),
+    )
+
+    # ── YAML front matter ────────────────────────────────────────────────
+    yaml_lines = [
         "---",
         "language:",
         f"  - {lang}",
         "task_categories:",
         "  - automatic-speech-recognition",
         "size_categories:",
-        "  - 1K<n<10K",
+        f"  - {_size_category(total_rows)}",
         "tags:",
         "  - synthetic",
         "  - tts-generated",
-        "---",
+        # dataset_info: declares features (audio + text + meta) per config
+        "dataset_info:",
+    ]
+    for (bucket, aug_state), stats in ordered:
+        cfg = f"{bucket}_{aug_state}"
+        yaml_lines.extend([
+            f"  - config_name: {cfg}",
+            "    features:",
+            "      - name: audio",
+            "        dtype:",
+            "          audio:",
+            "            sampling_rate: 16000",
+            "      - name: audio_filepath",
+            "        dtype: string",
+            "      - name: text",
+            "        dtype: string",
+            "      - name: duration",
+            "        dtype: float64",
+            "      - name: language",
+            "        dtype: string",
+            "      - name: source",
+            "        dtype: string",
+            "      - name: voice_id",
+            "        dtype: string",
+            "      - name: augmentation",
+            "        dtype: string",
+            "    splits:",
+            "      - name: train",
+            f"        num_examples: {stats['train']}",
+            "      - name: val",
+            f"        num_examples: {stats['val']}",
+        ])
+    # configs: where to load each config's data from
+    yaml_lines.append("configs:")
+    for (bucket, aug_state), _ in ordered:
+        cfg = f"{bucket}_{aug_state}"
+        yaml_lines.extend([
+            f"  - config_name: {cfg}",
+            "    data_files:",
+            "      - split: train",
+            f"        path: data/{cfg}/manifest.jsonl",
+            "      - split: val",
+            f"        path: data/{cfg}/val.jsonl",
+        ])
+    yaml_lines.append("---")
+
+    # ── Body ─────────────────────────────────────────────────────────────
+    body = [
         "",
         f"# Synthetic ASR data — `{lang}`",
         "",
@@ -161,23 +252,41 @@ def write_readme(staging_root: Path, lang: str, bucket_stats: dict) -> None:
         f"**Total audio: {total_hours:.1f} hr** across short (~5s) and long (~30s) length buckets,",
         "each in clean and augmented variants.",
         "",
+        "## Loading",
+        "",
+        "```python",
+        "from datasets import load_dataset",
+        "",
+        f'ds = load_dataset("<org>/synthetic-asr-{lang}", "short_clean")',
+        'print(ds["train"][0]["audio"])  # {"array": np.ndarray, "sampling_rate": 16000, "path": "..."}',
+        'print(ds["train"][0]["text"])',
+        "```",
+        "",
+        "Available configs:",
+        "",
+    ]
+    for (bucket, aug_state), _ in ordered:
+        body.append(f"- `{bucket}_{aug_state}`")
+    body.extend([
+        "",
         "## Splits",
         "",
         "| Bucket | Aug state | Train | Val | Audio (sec) |",
         "|---|---|---:|---:|---:|",
-    ]
-    for (bucket, aug_state), s in bucket_stats.items():
-        lines.append(
+    ])
+    for (bucket, aug_state), s in ordered:
+        body.append(
             f"| {bucket} | {aug_state} | {s['train']} | {s['val']} | {s['total_seconds']:.1f} |"
         )
-    lines.extend([
+    body.extend([
         "",
         "## Schema",
         "",
         "Each row in `manifest.jsonl` / `val.jsonl`:",
         "",
         "```json",
-        '{"audio_filepath": "audio/<filename>.wav",',
+        '{"audio": "audio/<filename>.wav",',
+        ' "audio_filepath": "audio/<filename>.wav",',
         ' "text": "...",',
         ' "duration": 4.35,',
         f' "language": "{lang}",',
@@ -186,10 +295,12 @@ def write_readme(staging_root: Path, lang: str, bucket_stats: dict) -> None:
         ' "augmentation": null | "<transform>"}',
         "```",
         "",
-        "Audio is 16 kHz mono WAV. Val split is a deterministic ~5% hash-based hold-out.",
+        "Audio is 16 kHz mono WAV. `audio` is auto-cast to `Audio(sampling_rate=16000)` by HF;",
+        "`audio_filepath` is the same path as a bare string for direct NeMo training-manifest use.",
+        "Val split is a deterministic ~5% hash-based hold-out.",
         "",
     ])
-    (staging_root / "README.md").write_text("\n".join(lines))
+    (staging_root / "README.md").write_text("\n".join(yaml_lines + body))
 
 
 def push(
