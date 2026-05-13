@@ -7,4 +7,5 @@ __pycache__/
 .env
 outputs/**/*.jsonl
 outputs/**/*.json
+outputs/**/_hf_staging/
 .claude/
