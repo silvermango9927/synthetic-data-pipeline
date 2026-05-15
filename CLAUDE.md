@@ -13,7 +13,7 @@ Generate synthetic ASR training data (audio + transcript pairs) for VALSEA's dow
 | Singlish | `en` | MERaLiON | edge-tts (Microsoft Neural) | `cesinsingapore/singlish` |
 | Vietnamese | `vi` | Blaze | edge-tts / Fish Speech / XTTS | `doof-ferb/infore1_25hours` |
 | Chinese (Mandarin) | `zh` | **Qwen2-Audio** | **edge-tts zh-CN** (default, free); MiniMax `speech-02-hd` and Qwen TTS are paid opt-ins | `AISHELL/AISHELL-1` |
-| Hindi | `hi` | **Whisper** | **Sarvam `bulbul:v3`** | `google/fleurs` (`hi_in`) |
+| Hindi | `hi` | **Whisper** | **edge-tts hi-IN** (default, free); Sarvam `bulbul:v3` is a paid opt-in | `google/fleurs` (`hi_in`) |
 
 ## Length conventions
 
@@ -52,12 +52,13 @@ Selected via `--length-target {short,long}` on `01_text_corpus/generate_{chinese
 
 ```
 OPENAI_API_KEY=...      # Stage 01 text generation (gpt-4.1) — required
-SARVAM_API_KEY=...      # Sarvam TTS for Hindi — required for hi runs
-MINIMAX_API_KEY=...     # MiniMax T2A v2 for Chinese — only if TTS_BACKEND=minimax
-DASHSCOPE_API_KEY=...   # Qwen TTS for Chinese — only if TTS_BACKEND=qwen (needs Model Studio activation)
+SARVAM_API_KEY=...      # Sarvam TTS for Hindi — only if TTS_BACKEND_HI=sarvam (opt-in)
+MINIMAX_API_KEY=...     # MiniMax T2A v2 for Chinese — only if TTS_BACKEND_ZH=minimax
+DASHSCOPE_API_KEY=...   # Qwen TTS for Chinese — only if TTS_BACKEND_ZH=qwen (needs Model Studio activation)
+HF_TOKEN=...            # only if pushing the bulk dataset to HuggingFace (07_hf_push)
 ```
 
-Default Chinese path uses free edge-tts and needs no key beyond OpenAI.
+Default Chinese and Hindi paths both use free edge-tts and need no key beyond OpenAI.
 
 Loaded automatically via `python-dotenv` at script entry.
 
@@ -92,9 +93,25 @@ The Chinese roundtrip can use Qwen2-Audio instead of Whisper:
 
 End-to-end prototype (50 short + 50 long per language, ~$1–5 in API cost):
 ```bash
-bash scripts/run_prototype_zh.sh   # Chinese (Qwen TTS)
-bash scripts/run_prototype_hi.sh   # Hindi (Sarvam TTS)
+bash scripts/run_prototype_zh.sh   # Chinese (edge-tts zh-CN by default)
+bash scripts/run_prototype_hi.sh   # Hindi (Sarvam by default; set TTS_BACKEND=edge for free hi-IN)
 ```
+
+### Bulk production run
+
+```bash
+# Default: edge-tts for both zh and hi (free, no provider keys beyond OpenAI).
+nohup bash scripts/run_bulk.sh > bulk_run.log 2>&1 &
+tail -f bulk_run.log
+
+# Before launching, run the smoke test to validate end-to-end wiring (~5–10 min):
+bash scripts/smoke_test_bulk.sh             # against existing outputs/
+ISOLATE=1 bash scripts/smoke_test_bulk.sh   # hermetic, exercises text gen + TTS from scratch
+```
+
+Sarvam is still wired up for opt-in (`TTS_BACKEND_HI=sarvam`), but credits must be funded
+first — synthesize.py now aborts the run after 10 consecutive 429s rather than silently
+producing nothing.
 
 Override sample counts:
 ```bash
@@ -153,6 +170,8 @@ No-deps fallback (when audiomentations won't install): `scripts/augment_simple.p
 - AISHELL streaming download is large; first run pulls metadata. Use `--skip-reference` for offline iteration.
 - FLEURS `hi_in` config name uses underscore (`hi_in`), not hyphen.
 - Sarvam max 2,500 chars per call — long-form Hindi (~110 words ≈ 600 chars) fits fine.
+- Sarvam credits exhaust silently: every call 429s with `insufficient_quota_error`. As of 2026-05-15 the default Hindi backend is edge-tts (free); synthesize.py aborts the run after 10 consecutive failures so a credit-out doesn't burn hours producing zero audio. Edge-tts hi-IN voices: `hi-IN-SwaraNeural` (F), `hi-IN-MadhurNeural` (M).
+- `04_quality_filter/filter.py` reads `clean/manifest_clean.jsonl` and `augmented/manifest_augmented.jsonl` explicitly — earlier versions used `rglob("manifest_*.jsonl")` and ended up double-counting their own output. If you re-introduce more manifests inside `outputs/<lang>/<bucket>/`, mirror the explicit listing.
 - MiniMax max 10,000 chars per call. Hex-encoded WAV in `data.audio` of the response — decode with `bytes.fromhex(...)`.
 - MiniMax errors can come back inside a 200 response; check `body["base_resp"]["status_code"] == 0` before treating as success.
 - Qwen3-TTS-Flash requires a one-click activation per Alibaba Cloud account at https://modelstudio.console.alibabacloud.com (Singapore region). Default zh path is MiniMax until that's done.

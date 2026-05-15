@@ -174,9 +174,17 @@ def main(
 
     in_path = Path(input_dir)
 
-    # Collect all manifests from clean/ and augmented/ subdirs
+    # Read clean + augmented manifests explicitly. Do NOT rglob — that re-ingests
+    # this script's own manifest_filtered.jsonl on re-runs, compounding duplicates,
+    # and also pulls in legacy paths like augmented_real/.
+    manifest_paths = [
+        in_path / "clean" / "manifest_clean.jsonl",
+        in_path / "augmented" / "manifest_augmented.jsonl",
+    ]
     all_entries = []
-    for manifest_file in in_path.rglob("manifest_*.jsonl"):
+    for manifest_file in manifest_paths:
+        if not manifest_file.exists():
+            continue
         with open(manifest_file) as f:
             for line in f:
                 all_entries.append(json.loads(line))

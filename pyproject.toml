@@ -18,7 +18,11 @@ dependencies = [
 
 [project.optional-dependencies]
 augment = [
-    "audiomentations>=0.36.0",  # requires Xcode/clang for numpy-minmax subpackage
+    # audiomentations >=0.36 pulls numpy-minmax, which fails to build on Apple Silicon
+    # (numpy-minmax's IS_X86_64 macro tries to compile AVX intrinsics on arm64).
+    # Pin to <0.36 until upstream fixes the macro.
+    "audiomentations>=0.35,<0.36",
+    "pydub",  # required for Mp3Compression in the augmentation Compose
 ]
 quality = [
     "openai-whisper>=20231117",

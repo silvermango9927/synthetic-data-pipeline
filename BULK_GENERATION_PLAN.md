@@ -58,12 +58,13 @@ With 2 voices/sentence and a ~10% overshoot to absorb dedup + duration-sanity re
 | Item | Estimate | Notes |
 |---|---|---|
 | OpenAI gpt-4.1 (text, 3,500 sentences) | **~$3.50** | ~350 batch calls × $0.01 avg |
-| Chinese edge-tts | **$0** | free |
-| Hindi Sarvam bulbul:v3 | **$5–30** | ~540 k chars across both buckets × 2 voices; rate varies by plan |
-| Hindi edge-tts (fallback if Sarvam not topped up) | $0 | 2 hi-IN voices: `hi-IN-SwaraNeural` (F), `hi-IN-MadhurNeural` (M). Less natural Hinglish, but free. |
+| Chinese edge-tts | **$0** | free; default zh backend |
+| Hindi edge-tts (**default** as of 2026-05-15) | **$0** | 2 hi-IN voices: `hi-IN-SwaraNeural` (F), `hi-IN-MadhurNeural` (M). Less natural Hinglish than Sarvam, but free and unmetered. |
+| Hindi Sarvam bulbul:v3 (opt-in via `TTS_BACKEND_HI=sarvam`) | **$5–30** | ~540 k chars across both buckets × 2 voices; rate varies by plan. Top up before launch — synthesize.py aborts on credit-out 429s. |
 | MiniMax / Qwen (unused) | $0 | skipped per earlier decision |
 | HuggingFace Datasets | $0 | free for private datasets at this size |
-| **Total** | **~$10–35** | dominated by Sarvam uncertainty — verify plan tier before launch |
+| **Total (edge-tts both languages, default)** | **~$3.50** | only OpenAI text gen costs anything. |
+| **Total (with Sarvam opt-in for hi)** | **~$10–35** | dominated by Sarvam plan tier — verify before launch. |
 
 ## Storage strategy
 
@@ -155,25 +156,30 @@ Every step is safe to re-run from any failure point:
 - [ ] HF dataset(s) browsable: `huggingface-cli` reports the right file count and size.
 - [ ] `datasets.load_dataset('valsea/synthetic-asr-zh', 'short_clean')` loads with audio decoding working.
 
-## Sarvam-fallback path (if no top-up)
+## Hindi backend choice
 
-If you don't top up Sarvam, **switch Hindi TTS to edge-tts** without changing the rest of the pipeline:
+**Default as of 2026-05-15: edge-tts hi-IN** (free). Sarvam is opt-in via env var.
 
 ```bash
-TTS_BACKEND_HI=edge bash scripts/run_bulk.sh
+# Default — free, both languages on edge-tts:
+bash scripts/run_bulk.sh
+
+# Opt into Sarvam for hi (requires SARVAM_API_KEY + funded credits):
+TTS_BACKEND_HI=sarvam bash scripts/run_bulk.sh
 ```
 
-- Uses 2 voices: `hi-IN-SwaraNeural` (F), `hi-IN-MadhurNeural` (M) — already in `EDGE_VOICES`.
+- Edge-tts hi-IN voices: `hi-IN-SwaraNeural` (F), `hi-IN-MadhurNeural` (M) — already in `EDGE_VOICES`.
 - $0 TTS cost, ~30 min Hindi synthesis time (network-bound).
-- Tradeoffs: less natural Hindi prosody, weaker Hinglish handling (Microsoft tends to mis-stress code-switched English). Acceptable as a baseline; you can re-run Hindi only via `TTS_BACKEND_HI=sarvam` once topped up — the resume logic skips existing WAVs so only the missing voice files get re-synthesised.
-- Bulk runner reads `TTS_BACKEND_ZH` (default `edge`) and `TTS_BACKEND_HI` (default `sarvam`) so either language can be flipped independently.
+- Tradeoffs vs Sarvam: less natural Hindi prosody, weaker Hinglish handling (Microsoft tends to mis-stress code-switched English). Acceptable for downstream Whisper finetuning, which sees plenty of edge-tts in the literature.
+- Sarvam credit-out used to fail silently; `synthesize.py` now aborts after 10 consecutive 429s. If you opt in and the run aborts, top up and re-launch — resume skips existing WAVs.
+- Bulk runner reads `TTS_BACKEND_ZH` (default `edge`) and `TTS_BACKEND_HI` (default `edge`) — flip either independently.
 
 ## Decisions locked in
 
 | Item | Decision |
 |---|---|
 | HF dataset layout | Two separate repos, one per language. Created under your HF namespace once `huggingface-cli whoami` confirms login. |
-| Sarvam | Default; falls back to edge-tts hi-IN if no top-up (see above). |
+| Hindi TTS | Default edge-tts hi-IN (free). Sarvam stays opt-in via `TTS_BACKEND_HI=sarvam` (see above). |
 | `audiomentations` | Installed via `pip install 'audiomentations<0.36' pydub` (Xcode license already accepted). |
 | MUSAN / RIR | Optional — pipeline gracefully skips noise/RIR if `noise_bank/` is empty. Drop in later for a re-aug pass without re-synthesising. |
 

@@ -38,7 +38,7 @@ def build_augmentation_pipeline(noise_bank: str):
     if not _AUDIOMENTATIONS_AVAILABLE:
         print(
             "[WARN] audiomentations not installed — augmentation is a file copy only.\n"
-            "  To enable: sudo xcodebuild -license && pip install -e '.[augment]'"
+            "  To enable on Apple Silicon: pip install 'audiomentations>=0.35,<0.36' pydub"
         )
         return _identity
 
@@ -103,10 +103,36 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
                 clean_manifest[Path(entry["audio_filepath"]).name] = entry
 
     augmented_manifest = []
+    skipped = 0
 
     print(f"Augmenting {len(wav_files)} files × {variants} variants...")
 
+    def _aug_path_valid(p: Path) -> bool:
+        try:
+            return p.exists() and p.stat().st_size >= 1024 and sf.info(str(p)).frames > 0
+        except Exception:
+            return False
+
     for wav_path in tqdm(wav_files):
+        # Resume: if every variant for this clean wav already exists, lazy-load durations
+        # and avoid re-augmenting (transforms are randomized — re-running would change them).
+        expected = [out_path / f"{wav_path.stem}_aug{v:02d}.wav" for v in range(variants)]
+        if all(_aug_path_valid(p) for p in expected):
+            for v, aug_path in enumerate(expected):
+                base_entry = clean_manifest.get(wav_path.name, {})
+                info = sf.info(str(aug_path))
+                augmented_manifest.append({
+                    "audio_filepath": str(aug_path),
+                    "text": base_entry.get("text", ""),
+                    "duration": info.duration,
+                    "language": base_entry.get("language", ""),
+                    "source": "synthetic",
+                    "voice_id": base_entry.get("voice_id", ""),
+                    "augmentation": "passthrough" if not _AUDIOMENTATIONS_AVAILABLE else f"variant_{v}",
+                })
+                skipped += 1
+            continue
+
         audio, sr = sf.read(str(wav_path), dtype="float32")
 
         if sr != sample_rate:
@@ -138,7 +164,11 @@ def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample
         for entry in augmented_manifest:
             f.write(json.dumps(entry) + "\n")
 
-    print(f"Created {len(augmented_manifest)} augmented files. Manifest: {manifest_path}")
+    new_count = len(augmented_manifest) - skipped
+    print(
+        f"Augmented manifest: {len(augmented_manifest)} entries "
+        f"({new_count} new, {skipped} resumed). Path: {manifest_path}"
+    )
 
 
 if __name__ == "__main__":

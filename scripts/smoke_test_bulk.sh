@@ -47,7 +47,7 @@ export SKIP_HF=1   # never push during smoke
 
 # Default backends (override via env to test other paths).
 export TTS_BACKEND_ZH="${TTS_BACKEND_ZH:-edge}"
-export TTS_BACKEND_HI="${TTS_BACKEND_HI:-sarvam}"
+export TTS_BACKEND_HI="${TTS_BACKEND_HI:-edge}"
 
 PRESERVED_DIR=""
 SMOKE_DIR=""
@@ -163,7 +163,7 @@ assert not fail
 EOF
 
 echo ""
-echo ">>> [5/7] Verify: train_manifest.json is valid NeMo (audio_filepath + text + duration)"
+echo ">>> [5/7] Verify: train_manifest.json is valid NeMo (audio_filepath + text + duration) and dedup'd"
 "$PYTHON" - <<'EOF' 2>&1 | tee "$LOG_DIR/05_verify_export.log"
 import json
 from pathlib import Path
@@ -185,8 +185,16 @@ for lang in ('chinese', 'hindi'):
             print(f'  FAIL {lang}/{bucket}: {len(bad)} rows missing NeMo keys')
             fail = True
             continue
+        # Regression guard for the filter.rglob bug: every audio_filepath must be unique.
+        paths = [r['audio_filepath'] for r in rows]
+        if len(paths) != len(set(paths)):
+            dup = len(paths) - len(set(paths))
+            print(f'  FAIL {lang}/{bucket}: {dup} duplicate audio_filepath rows '
+                  f'({len(rows)} total, {len(set(paths))} unique) — filter dedup regression')
+            fail = True
+            continue
         total_sec = sum(r['duration'] for r in rows)
-        print(f'  PASS {lang}/{bucket}: {len(rows)} rows, {total_sec/60:.1f} min audio')
+        print(f'  PASS {lang}/{bucket}: {len(rows)} rows ({len(set(paths))} unique), {total_sec/60:.1f} min audio')
 assert not fail
 EOF
 

@@ -4,7 +4,7 @@ Generates synthetic training data for finetuning:
 - **Blaze** (Vietnamese ASR) — edge-tts / Fish Speech
 - **MERaLiON** (Singlish ASR) — edge-tts
 - **Qwen2-Audio** (Mandarin Chinese ASR) — edge-tts zh-CN (default, free); MiniMax `speech-02-hd` or Qwen `qwen3-tts-flash` available as paid opt-ins
-- **Whisper** (Hindi ASR) — Sarvam `bulbul:v3`
+- **Whisper** (Hindi ASR) — edge-tts hi-IN (default, free); Sarvam `bulbul:v3` is a paid opt-in
 
 Per-language corpora come in two length buckets: ~5s (short) and ~30s (long).
 
@@ -17,19 +17,25 @@ Text Corpus (OpenAI gpt-4.1) → TTS (per-language provider) → Augmentation �
 ## Quick Start
 
 ```bash
-# 1. Setup
-.venv/bin/pip install -e ".[prototype,tts-cloud,quality,dev]"
+# 1. Setup (lighter install — only OpenAI + edge-tts; no torch/whisper)
+.venv/bin/pip install -e ".[prototype,tts-cloud]"
+# Augmentation on Apple Silicon needs the pinned audiomentations:
+.venv/bin/pip install 'audiomentations>=0.35,<0.36' pydub
 
-# 2. Set API keys in .env
+# 2. Set API keys in .env (only OPENAI_API_KEY is required for the default path)
 echo 'OPENAI_API_KEY=...'    >> .env
-echo 'MINIMAX_API_KEY=...'   >> .env   # Chinese (MiniMax T2A v2 — default)
-echo 'DASHSCOPE_API_KEY=...' >> .env   # Chinese (Qwen TTS — alternative)
-echo 'SARVAM_API_KEY=...'    >> .env   # Hindi (Sarvam TTS)
+echo 'MINIMAX_API_KEY=...'   >> .env   # only if TTS_BACKEND_ZH=minimax
+echo 'DASHSCOPE_API_KEY=...' >> .env   # only if TTS_BACKEND_ZH=qwen
+echo 'SARVAM_API_KEY=...'    >> .env   # only if TTS_BACKEND_HI=sarvam
 
 # 3. Run prototype per language (50 short + 50 long, end-to-end)
 bash scripts/run_prototype.sh       # Singlish (legacy)
 bash scripts/run_prototype_zh.sh    # Chinese
-bash scripts/run_prototype_hi.sh    # Hindi
+bash scripts/run_prototype_hi.sh    # Hindi (Sarvam by default — set TTS_BACKEND=edge for free)
+
+# 4. Bulk production run (Chinese + Hindi, edge-tts default, ~3 hr per bucket-state)
+bash scripts/smoke_test_bulk.sh         # 5–10 min smoke before bulk
+nohup bash scripts/run_bulk.sh > bulk_run.log 2>&1 &
 
 # Override sample counts:
 COUNT_SHORT=200 COUNT_LONG=200 bash scripts/run_prototype_zh.sh

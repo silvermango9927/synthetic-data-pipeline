@@ -326,6 +326,10 @@ def synthesize_minimax_tts(
         return False
 
 
+# Module-level flag so callers (or main()) can detect Sarvam credit exhaustion and abort.
+SARVAM_QUOTA_EXHAUSTED = False
+
+
 def synthesize_sarvam_tts(
     text: str,
     voice: str,
@@ -368,6 +372,9 @@ def synthesize_sarvam_tts(
         return False
 
     if resp.status_code != 200:
+        global SARVAM_QUOTA_EXHAUSTED
+        if resp.status_code == 429 and "insufficient_quota" in resp.text:
+            SARVAM_QUOTA_EXHAUSTED = True
         print(f"[ERROR] Sarvam returned {resp.status_code}: {resp.text[:200]}")
         return False
 
@@ -586,6 +593,9 @@ def main(
     # We rebuild it from disk at the end to dedup and drop entries for missing WAVs.
     manifest_path = out / "manifest_clean.jsonl"
     new_entries = 0
+    consecutive_failures = 0
+    FAIL_FAST_THRESHOLD = 10  # abort if first 10 consecutive jobs fail (e.g. Sarvam 429s)
+    aborted = False
     with open(manifest_path, "a", buffering=1) as mf:  # line-buffered append
         if workers <= 1:
             for job in tqdm(todo, desc="tts"):
@@ -593,6 +603,15 @@ def main(
                 if entry is not None:
                     mf.write(json.dumps(entry) + "\n")
                     new_entries += 1
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                if (backend == "sarvam" and SARVAM_QUOTA_EXHAUSTED) or \
+                        (new_entries == 0 and consecutive_failures >= FAIL_FAST_THRESHOLD):
+                    print(f"[ABORT] {consecutive_failures} consecutive TTS failures with 0 new audio. "
+                          f"Stopping. Check provider credits/rate-limits, or switch backend.")
+                    aborted = True
+                    break
         else:
             from concurrent.futures import ThreadPoolExecutor, as_completed
             with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -602,6 +621,17 @@ def main(
                     if entry is not None:
                         mf.write(json.dumps(entry) + "\n")
                         new_entries += 1
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
+                    if (backend == "sarvam" and SARVAM_QUOTA_EXHAUSTED) or \
+                            (new_entries == 0 and consecutive_failures >= FAIL_FAST_THRESHOLD):
+                        print(f"[ABORT] {consecutive_failures} consecutive TTS failures with 0 new audio. "
+                              f"Stopping. Check provider credits/rate-limits, or switch backend.")
+                        aborted = True
+                        for f in futures:
+                            f.cancel()
+                        break
 
     # Rebuild manifest: dedup by audio_filepath, keep only entries whose WAV is on disk.
     seen = {}
@@ -623,6 +653,12 @@ def main(
         f"Synthesized {new_entries} new audio files (skipped {len(skipped)} resumed). "
         f"Manifest now has {len(seen)} entries: {manifest_path}"
     )
+    if aborted:
+        raise SystemExit(
+            "TTS aborted after consecutive failures (likely Sarvam credits exhausted or "
+            "provider outage). Top up the provider, switch backend (e.g. TTS_BACKEND_HI=edge), "
+            "and re-run — resume will pick up where we stopped."
+        )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@
 #   WORKERS_ZH        concurrent TTS calls for Chinese (edge) (default: 6)
 #   WORKERS_HI        concurrent TTS calls for Hindi  (Sarvam)(default: 4)
 #   TTS_BACKEND_ZH    edge | minimax | qwen                   (default: edge)
-#   TTS_BACKEND_HI    sarvam | edge                           (default: sarvam)
+#   TTS_BACKEND_HI    edge | sarvam                           (default: edge)
 #   HF_REPO_ZH        HF dataset repo for Chinese             (default: skip push)
 #   HF_REPO_HI        HF dataset repo for Hindi               (default: skip push)
 #   SKIP_HF           if set, never push to HF
@@ -24,8 +24,8 @@
 #   # or with a HF push:
 #   HF_REPO_ZH=valsea/synthetic-asr-zh HF_REPO_HI=valsea/synthetic-asr-hi \
 #     bash scripts/run_bulk.sh
-#   # Sarvam-credit-out fallback for Hindi:
-#   TTS_BACKEND_HI=edge bash scripts/run_bulk.sh
+#   # Opt back into Sarvam for Hindi (requires SARVAM_API_KEY + credits):
+#   TTS_BACKEND_HI=sarvam bash scripts/run_bulk.sh
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -44,7 +44,7 @@ VOICES_PER_SENT="${VOICES_PER_SENT:-2}"
 WORKERS_ZH="${WORKERS_ZH:-6}"
 WORKERS_HI="${WORKERS_HI:-4}"
 TTS_BACKEND_ZH="${TTS_BACKEND_ZH:-edge}"
-TTS_BACKEND_HI="${TTS_BACKEND_HI:-sarvam}"
+TTS_BACKEND_HI="${TTS_BACKEND_HI:-edge}"
 
 LOG_DIR="logs/bulk_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOG_DIR"
