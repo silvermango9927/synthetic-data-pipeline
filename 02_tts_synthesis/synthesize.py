@@ -6,6 +6,7 @@ import io
 import json
 import os
 import random
+import subprocess
 from pathlib import Path
 
 import click
@@ -142,17 +143,30 @@ def synthesize_edge_tts(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         await communicate.save(str(tmp_path))
 
-        # Convert MP3 → WAV at 16kHz mono
-        import librosa
-        import numpy as np
-
-        audio, sr = librosa.load(str(tmp_path), sr=16000, mono=True)
-        sf.write(str(output_path), audio, sr)
+        # Convert MP3 → WAV at 16 kHz mono via ffmpeg subprocess.
+        # We deliberately avoid `import librosa` here: under
+        # ThreadPoolExecutor (workers>=2) the inline import + numba JIT
+        # races with asyncio.run()'s per-thread event loop creation and
+        # bus-errors on macOS after a few thousand calls.
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp_path),
+             "-ar", "16000", "-ac", "1", str(output_path)],
+            check=True,
+        )
         tmp_path.unlink(missing_ok=True)
 
+    # 60s ceiling per clip: Microsoft hi-IN endpoint occasionally stalls a
+    # socket read forever. Without this, a single hung request deadlocks the
+    # entire ThreadPoolExecutor.
+    async def _run_with_timeout() -> None:
+        await asyncio.wait_for(_run(), timeout=60.0)
+
     try:
-        asyncio.run(_run())
+        asyncio.run(_run_with_timeout())
         return True
+    except asyncio.TimeoutError:
+        print(f"[ERROR] edge-tts timeout (60s) for voice {voice!r}")
+        return False
     except Exception as e:
         print(f"[ERROR] edge-tts failed for voice {voice!r}: {e}")
         return False
