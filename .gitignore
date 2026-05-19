@@ -7,5 +7,12 @@ __pycache__/
 .env
 outputs/**/*.jsonl
 outputs/**/*.json
+outputs/**/*.wav
 outputs/**/_hf_staging/
+outputs.smoke_*/
+outputs.polluted_*/
+logs/
+bulk_run.log*
+hf_push.log*
+bulk_watcher.log
 .claude/
