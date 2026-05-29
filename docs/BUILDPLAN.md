@@ -20,7 +20,7 @@ Create the full directory structure and config files.
 ### 1.1 Create directory structure
 
 ```bash
-mkdir -p valsea-asr-datagen/{01_text_corpus/{prompts,lexicons},02_tts_synthesis/{voice_bank/{singlish,vietnamese},configs},03_augmentation/noise_bank,04_quality_filter,05_real_data_curation,06_dataset_export,outputs/{vietnamese/{clean,augmented},singlish/{clean,augmented}},scripts,tests}
+mkdir -p valsea-asr-datagen/{data_generation/01_text_corpus/{prompts,lexicons},data_generation/02_tts_synthesis/{voice_bank/{singlish,vietnamese},configs},data_generation/03_augmentation/noise_bank,04_quality_filter,05_real_data_curation,06_dataset_export,outputs/{vietnamese/{clean,augmented},singlish/{clean,augmented}},scripts,tests}
 cd valsea-asr-datagen
 git init
 ```
@@ -83,31 +83,31 @@ setup:
 	@echo "For real data curation: pip install -e '.[real-data]'"
 
 generate-text:
-	python 01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 1000
-	python 01_text_corpus/generate_vietnamese.py --output outputs/vietnamese/corpus.jsonl --count 1000
+	python data_generation/01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 1000
+	python data_generation/01_text_corpus/generate_vietnamese.py --output outputs/vietnamese/corpus.jsonl --count 1000
 
 synthesize:
-	python 02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en
-	python 02_tts_synthesis/synthesize.py --corpus outputs/vietnamese/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/vietnamese --output-dir outputs/vietnamese/clean --lang vi
+	python data_generation/02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en
+	python data_generation/02_tts_synthesis/synthesize.py --corpus outputs/vietnamese/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/vietnamese --output-dir outputs/vietnamese/clean --lang vi
 
 augment:
-	python 03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank 03_augmentation/noise_bank
-	python 03_augmentation/augment.py --input-dir outputs/vietnamese/clean --output-dir outputs/vietnamese/augmented --noise-bank 03_augmentation/noise_bank
+	python data_generation/03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank data_generation/03_augmentation/noise_bank
+	python data_generation/03_augmentation/augment.py --input-dir outputs/vietnamese/clean --output-dir outputs/vietnamese/augmented --noise-bank data_generation/03_augmentation/noise_bank
 
 filter:
-	python 04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
-	python 04_quality_filter/filter.py --input-dir outputs/vietnamese --output outputs/vietnamese/manifest_filtered.jsonl --lang vi
+	python data_generation/04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
+	python data_generation/04_quality_filter/filter.py --input-dir outputs/vietnamese --output outputs/vietnamese/manifest_filtered.jsonl --lang vi
 
 export:
-	python 06_dataset_export/export_nemo_manifest.py --input outputs/singlish/manifest_filtered.jsonl --output outputs/singlish/train_manifest.json
-	python 06_dataset_export/export_nemo_manifest.py --input outputs/vietnamese/manifest_filtered.jsonl --output outputs/vietnamese/train_manifest.json
+	python data_generation/06_dataset_export/export_nemo_manifest.py --input outputs/singlish/manifest_filtered.jsonl --output outputs/singlish/train_manifest.json
+	python data_generation/06_dataset_export/export_nemo_manifest.py --input outputs/vietnamese/manifest_filtered.jsonl --output outputs/vietnamese/train_manifest.json
 
 # Quick prototype: generate 50 sentences, synthesize, filter — end to end
 prototype:
-	python 01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 50
-	python 02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en --voices-per-sentence 1
-	python 03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank 03_augmentation/noise_bank --variants 1
-	python 04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
+	python data_generation/01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 50
+	python data_generation/02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en --voices-per-sentence 1
+	python data_generation/03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank data_generation/03_augmentation/noise_bank --variants 1
+	python data_generation/04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
 	@echo "Done. Check outputs/singlish/manifest_filtered.jsonl"
 
 clean:
@@ -121,8 +121,8 @@ outputs/singlish/clean/
 outputs/singlish/augmented/
 outputs/vietnamese/clean/
 outputs/vietnamese/augmented/
-03_augmentation/noise_bank/*.wav
-02_tts_synthesis/voice_bank/**/*.wav
+data_generation/03_augmentation/noise_bank/*.wav
+data_generation/02_tts_synthesis/voice_bank/**/*.wav
 __pycache__/
 *.egg-info/
 .venv/
@@ -171,7 +171,7 @@ class PipelineConfig(BaseModel):
     snr_range: tuple[float, float] = (10.0, 25.0)
     
     # Paths
-    noise_bank: Path = Path("03_augmentation/noise_bank")
+    noise_bank: Path = Path("data_generation/03_augmentation/noise_bank")
     output_base: Path = Path("outputs")
 
 
@@ -183,7 +183,7 @@ CONFIG = PipelineConfig()
 
 ## Phase 2: Text Corpus Generation
 
-### 2.1 Create Singlish lexicon file `01_text_corpus/lexicons/singlish_particles.csv`
+### 2.1 Create Singlish lexicon file `data_generation/01_text_corpus/lexicons/singlish_particles.csv`
 
 ```csv
 term,category,example_position,notes
@@ -209,7 +209,7 @@ kaypoh,adjective,any,"Nosy: 'Don't so kaypoh lah'"
 atas,adjective,any,"High-class/posh: 'This restaurant very atas'"
 ```
 
-### 2.2 Create Vietnamese lexicon `01_text_corpus/lexicons/vietnamese_tonal.csv`
+### 2.2 Create Vietnamese lexicon `data_generation/01_text_corpus/lexicons/vietnamese_tonal.csv`
 
 ```csv
 term,tone,confusable_with,domain,notes
@@ -227,7 +227,7 @@ hóa đơn,rising+level,,"finance","Invoice"
 giao hàng,level+falling,,"logistics","Delivery"
 ```
 
-### 2.3 Create `01_text_corpus/prompts/singlish_system.txt`
+### 2.3 Create `data_generation/01_text_corpus/prompts/singlish_system.txt`
 
 ```text
 You are a Singlish sentence generator for training speech recognition models. Generate realistic conversational Singlish utterances that a Singaporean would naturally say in everyday situations.
@@ -246,7 +246,7 @@ Rules:
 Return ONLY a JSON array of strings. No markdown, no explanation, no preamble.
 ```
 
-### 2.4 Create `01_text_corpus/prompts/vietnamese_system.txt`
+### 2.4 Create `data_generation/01_text_corpus/prompts/vietnamese_system.txt`
 
 ```text
 You are a Vietnamese sentence generator for training speech recognition models. Generate realistic conversational Vietnamese utterances covering everyday situations.
@@ -265,7 +265,7 @@ Rules:
 Return ONLY a JSON array of strings. No markdown, no explanation, no preamble.
 ```
 
-### 2.5 Create `01_text_corpus/generate_singlish.py`
+### 2.5 Create `data_generation/01_text_corpus/generate_singlish.py`
 
 ```python
 """Generate Singlish text corpus using Claude API."""
@@ -330,7 +330,7 @@ def generate_batch(
 @click.option("--batch-size", default=20, help="Sentences per API call")
 @click.option(
     "--lexicon",
-    default="01_text_corpus/lexicons/singlish_particles.csv",
+    default="data_generation/01_text_corpus/lexicons/singlish_particles.csv",
     help="Lexicon CSV path",
 )
 def main(output: str, count: int, batch_size: int, lexicon: str):
@@ -339,7 +339,7 @@ def main(output: str, count: int, batch_size: int, lexicon: str):
     lex = load_lexicon(lexicon)
     terms = [row["term"] for row in lex]
     
-    system_prompt = Path("01_text_corpus/prompts/singlish_system.txt").read_text()
+    system_prompt = Path("data_generation/01_text_corpus/prompts/singlish_system.txt").read_text()
     
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     main()
 ```
 
-### 2.6 Create `01_text_corpus/generate_vietnamese.py`
+### 2.6 Create `data_generation/01_text_corpus/generate_vietnamese.py`
 
 Same structure as `generate_singlish.py` but:
 - Uses `vietnamese_tonal.csv` lexicon
@@ -439,7 +439,7 @@ def generate_batch(
 @click.option("--batch-size", default=20, help="Sentences per API call")
 @click.option(
     "--lexicon",
-    default="01_text_corpus/lexicons/vietnamese_tonal.csv",
+    default="data_generation/01_text_corpus/lexicons/vietnamese_tonal.csv",
     help="Lexicon CSV path",
 )
 def main(output: str, count: int, batch_size: int, lexicon: str):
@@ -448,7 +448,7 @@ def main(output: str, count: int, batch_size: int, lexicon: str):
     lex = load_lexicon(lexicon)
     terms = [row["term"] for row in lex]
     
-    system_prompt = Path("01_text_corpus/prompts/vietnamese_system.txt").read_text()
+    system_prompt = Path("data_generation/01_text_corpus/prompts/vietnamese_system.txt").read_text()
     
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -483,7 +483,7 @@ if __name__ == "__main__":
 
 ## Phase 3: TTS Synthesis
 
-### 3.1 Create `02_tts_synthesis/synthesize.py`
+### 3.1 Create `data_generation/02_tts_synthesis/synthesize.py`
 
 This script supports two backends:
 - **Fish Speech S2** (primary) — via HTTP API (self-hosted or fish.audio cloud)
@@ -651,7 +651,7 @@ if __name__ == "__main__":
 
 ### 3.2 Create placeholder voice bank README
 
-Create `02_tts_synthesis/voice_bank/README.md`:
+Create `data_generation/02_tts_synthesis/voice_bank/README.md`:
 
 ```markdown
 # Voice Bank
@@ -678,7 +678,7 @@ to validate the pipeline.
 
 ## Phase 4: Audio Augmentation
 
-### 4.1 Create `03_augmentation/augment.py`
+### 4.1 Create `data_generation/03_augmentation/augment.py`
 
 ```python
 """Apply audio augmentations to make synthetic speech more realistic."""
@@ -745,7 +745,7 @@ def build_augmentation_pipeline(noise_bank: str) -> Compose:
 @click.command()
 @click.option("--input-dir", required=True, help="Directory with clean WAVs")
 @click.option("--output-dir", required=True, help="Output directory for augmented WAVs")
-@click.option("--noise-bank", default="03_augmentation/noise_bank", help="Noise bank directory")
+@click.option("--noise-bank", default="data_generation/03_augmentation/noise_bank", help="Noise bank directory")
 @click.option("--variants", default=2, help="Number of augmented variants per clean file")
 @click.option("--sample-rate", default=16000, help="Target sample rate")
 def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample_rate: int):
@@ -821,7 +821,7 @@ if __name__ == "__main__":
 # Download noise corpora for augmentation
 set -e
 
-NOISE_DIR="03_augmentation/noise_bank"
+NOISE_DIR="data_generation/03_augmentation/noise_bank"
 mkdir -p "$NOISE_DIR/ambient" "$NOISE_DIR/rir"
 
 echo "=== Downloading MUSAN noise corpus ==="
@@ -850,7 +850,7 @@ ls -la "$NOISE_DIR/rir/" | head -5
 
 ## Phase 5: Quality Filtering
 
-### 5.1 Create `04_quality_filter/filter.py`
+### 5.1 Create `data_generation/04_quality_filter/filter.py`
 
 ```python
 """Three-layer quality filter: UTMOS + ASR roundtrip + acoustic sanity."""
@@ -1040,7 +1040,7 @@ if __name__ == "__main__":
 
 ## Phase 6: Dataset Export
 
-### 6.1 Create `06_dataset_export/export_nemo_manifest.py`
+### 6.1 Create `data_generation/06_dataset_export/export_nemo_manifest.py`
 
 ```python
 """Export filtered data to NeMo-compatible manifest format."""
@@ -1118,8 +1118,8 @@ docker run -p 8080:8080 --gpus all fishaudio/fish-speech:latest
 
 # 3. Add voice references
 # Put 10-30s WAV clips in:
-#   02_tts_synthesis/voice_bank/singlish/
-#   02_tts_synthesis/voice_bank/vietnamese/
+#   data_generation/02_tts_synthesis/voice_bank/singlish/
+#   data_generation/02_tts_synthesis/voice_bank/vietnamese/
 
 # 4. Run prototype (50 sentences, end-to-end)
 make prototype

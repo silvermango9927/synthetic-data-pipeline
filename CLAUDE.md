@@ -6,6 +6,26 @@ Cross-session context for Claude. This file is read at the start of every conver
 
 Generate synthetic ASR training data (audio + transcript pairs) for VALSEA's downstream finetuning of language-specific ASR models. Outputs are NeMo-format JSONL manifests consumed by the VALSEA monorepo's training scripts.
 
+## Repository layout
+
+This is a research repo. **Synthetic data generation is one subset of it** — the full
+pipeline (stages 01–07) lives under `data_generation/`. ASR finetuning and the
+scaling-laws evaluation live under `benchmark/`.
+
+```
+data_generation/   # synthetic ASR data pipeline — stages 01_…07_ (see "Pipeline stages")
+benchmark/         # research: ASR finetuning + scaling-laws evaluation
+scripts/           # orchestration: run_prototype*.sh, run_bulk.sh, config.py, check_env.py
+docs/              # BUILDPLAN.md, BULK_GENERATION_PLAN.md
+outputs/           # generated data + benchmark results (gitignored except outputs/benchmark/stats/)
+tests/
+```
+
+Stage scripts are invoked **by path from the repo root** (e.g.
+`.venv/bin/python data_generation/01_text_corpus/generate_chinese.py …`); there are no
+cross-stage Python imports. The `data_generation/` prefix is part of every invocation and
+of the stage scripts' own default prompt/lexicon/noise-bank paths.
+
 ## Languages & downstream targets
 
 | Language | Code | Downstream ASR target | TTS provider | Reference dataset (HF) |
@@ -21,7 +41,7 @@ Two corpora per language for zh/hi:
 - **short**: 8–15 words / ~50–90 chars (Devanagari) or 12–28 Hanzi → ~5 seconds spoken.
 - **long**: 75–110 words → ~30 seconds spoken.
 
-Selected via `--length-target {short,long}` on `01_text_corpus/generate_{chinese,hindi}.py`. The two buckets land in `outputs/{chinese,hindi}/{short,long}/`.
+Selected via `--length-target {short,long}` on `data_generation/01_text_corpus/generate_{chinese,hindi}.py`. The two buckets land in `outputs/{chinese,hindi}/{short,long}/`.
 
 ## Audio format invariant
 
@@ -45,7 +65,7 @@ Selected via `--length-target {short,long}` on `01_text_corpus/generate_{chinese
   ```bash
   .venv/bin/pip install 'audiomentations<0.36' pydub
   ```
-  `pydub` is needed for `Mp3Compression` and shells out to `ffmpeg` (already at `/opt/homebrew/bin/ffmpeg`). Without these, `03_augmentation/augment.py` falls back to pass-through (literal file copies). On x86_64 the upstream extras (`pip install -e '.[augment]'`) may work, but on this arm64 box do not use it.
+  `pydub` is needed for `Mp3Compression` and shells out to `ffmpeg` (already at `/opt/homebrew/bin/ffmpeg`). Without these, `data_generation/03_augmentation/augment.py` falls back to pass-through (literal file copies). On x86_64 the upstream extras (`pip install -e '.[augment]'`) may work, but on this arm64 box do not use it.
 - **GPU**: required for fast UTMOS, Whisper-large-v3-turbo, and Qwen2-Audio-7B QC. Qwen2-Audio needs ~14 GB VRAM.
 
 ## API keys (in `.env`, gitignored)
@@ -65,16 +85,16 @@ Loaded automatically via `python-dotenv` at script entry.
 
 | Stage | Path | Notes |
 |---|---|---|
-| 01 Text corpus | `01_text_corpus/generate_{singlish,vietnamese,chinese,hindi}.py` | OpenAI gpt-4.1 + few-shot reference + lexicon. Outputs JSONL. |
-| 02 TTS synthesis | `02_tts_synthesis/synthesize.py` | Backends: `edge`, `fish`, `xtts`, `qwen`, `minimax`, `sarvam`. Selected via `--backend`. |
-| 03 Augmentation | `03_augmentation/augment.py` | Language-agnostic. Time-stretch, pitch, gain, bandpass, MP3 codec; noise/RIR if `noise_bank/{ambient,rir}` populated. Requires `audiomentations<0.36` + `pydub`; otherwise pass-through. Fallback: `scripts/augment_simple.py` (no audiomentations dep). |
-| 04 Quality filter | `04_quality_filter/filter.py` | 3 layers: duration sanity + UTMOS + roundtrip WER. `--qc-asr` selects whisper or qwen2-audio. |
-| 05 Real-data curation | `05_real_data_curation/` | Placeholder (unimplemented). |
-| 06 Export | `06_dataset_export/export_nemo_manifest.py` | Strips metadata to NeMo JSONL `{audio_filepath, text, duration}`. |
+| 01 Text corpus | `data_generation/01_text_corpus/generate_{singlish,vietnamese,chinese,hindi}.py` | OpenAI gpt-4.1 + few-shot reference + lexicon. Outputs JSONL. |
+| 02 TTS synthesis | `data_generation/02_tts_synthesis/synthesize.py` | Backends: `edge`, `fish`, `xtts`, `qwen`, `minimax`, `sarvam`. Selected via `--backend`. |
+| 03 Augmentation | `data_generation/03_augmentation/augment.py` | Language-agnostic. Time-stretch, pitch, gain, bandpass, MP3 codec; noise/RIR if `noise_bank/{ambient,rir}` populated. Requires `audiomentations<0.36` + `pydub`; otherwise pass-through. Fallback: `scripts/augment_simple.py` (no audiomentations dep). |
+| 04 Quality filter | `data_generation/04_quality_filter/filter.py` | 3 layers: duration sanity + UTMOS + roundtrip WER. `--qc-asr` selects whisper or qwen2-audio. |
+| 05 Real-data curation | `data_generation/05_real_data_curation/` | Placeholder (unimplemented). |
+| 06 Export | `data_generation/06_dataset_export/export_nemo_manifest.py` | Strips metadata to NeMo JSONL `{audio_filepath, text, duration}`. |
 
 ## QC defaults per language
 
-WER thresholds (auto-applied in `04_quality_filter/filter.py`):
+WER thresholds (auto-applied in `data_generation/04_quality_filter/filter.py`):
 
 | Language | Threshold | Notes |
 |---|---|---|
@@ -85,7 +105,7 @@ WER thresholds (auto-applied in `04_quality_filter/filter.py`):
 
 The Chinese roundtrip can use Qwen2-Audio instead of Whisper:
 ```bash
-04_quality_filter/filter.py --lang zh --qc-asr qwen2-audio ...
+data_generation/04_quality_filter/filter.py --lang zh --qc-asr qwen2-audio ...
 ```
 
 ## How to run
@@ -112,14 +132,14 @@ outputs/<lang>/
 
 Once `audiomentations<0.36` + `pydub` are installed (see Environment), augment a bucket like:
 ```bash
-.venv/bin/python 03_augmentation/augment.py \
+.venv/bin/python data_generation/03_augmentation/augment.py \
   --input-dir outputs/chinese/short/clean \
   --output-dir outputs/chinese/short/augmented \
   --variants 2
 ```
 - Default 2 variants per clean clip. WAVs land alongside the clean ones; `manifest_augmented.jsonl` records `variant_0` / `variant_1`.
 - Verify it actually augmented (vs silently passing through): `grep -c '"augmentation": "passthrough"' outputs/<lang>/<bucket>/augmented/manifest_augmented.jsonl` should return `0`.
-- Empty `noise_bank/{ambient,rir}` means noise + reverb stages are skipped (warning, not error). Drop MUSAN into `03_augmentation/noise_bank/ambient/` and RIRS_NOISES into `03_augmentation/noise_bank/rir/` to enable them.
+- Empty `noise_bank/{ambient,rir}` means noise + reverb stages are skipped (warning, not error). Drop MUSAN into `data_generation/03_augmentation/noise_bank/ambient/` and RIRS_NOISES into `data_generation/03_augmentation/noise_bank/rir/` to enable them.
 
 No-deps fallback (when audiomentations won't install): `scripts/augment_simple.py` mirrors the non-noise/non-RIR transforms using only librosa + scipy + numpy. Same CLI shape:
 ```bash
@@ -132,11 +152,11 @@ No-deps fallback (when audiomentations won't install): `scripts/augment_simple.p
 ## Adding a new language (6-step checklist)
 
 1. Add to `Language` enum in `scripts/config.py:8-12`.
-2. Add WER threshold in `scripts/config.py` and `WER_THRESHOLDS` dict in `04_quality_filter/filter.py`.
-3. Create `01_text_corpus/prompts/<lang>_{short,long}_system.txt`.
-4. Create `01_text_corpus/lexicons/<lang>_*.csv`.
-5. Create `01_text_corpus/generate_<lang>.py` (copy nearest existing, swap `REFERENCE_DATASET`, `MODEL`, language tag).
-6. If new TTS provider: add `synthesize_<provider>_tts(...)` to `02_tts_synthesis/synthesize.py`, add voice list constant, register in `--backend` `click.Choice`, wire into `main()` dispatch.
+2. Add WER threshold in `scripts/config.py` and `WER_THRESHOLDS` dict in `data_generation/04_quality_filter/filter.py`.
+3. Create `data_generation/01_text_corpus/prompts/<lang>_{short,long}_system.txt`.
+4. Create `data_generation/01_text_corpus/lexicons/<lang>_*.csv`.
+5. Create `data_generation/01_text_corpus/generate_<lang>.py` (copy nearest existing, swap `REFERENCE_DATASET`, `MODEL`, language tag).
+6. If new TTS provider: add `synthesize_<provider>_tts(...)` to `data_generation/02_tts_synthesis/synthesize.py`, add voice list constant, register in `--backend` `click.Choice`, wire into `main()` dispatch.
 
 ## Cost notes
 

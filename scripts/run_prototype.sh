@@ -35,7 +35,7 @@ fi
 
 # ── Step 1: Generate text corpus ─────────────────────────────────────────────
 echo ">>> Step 1: Generate 10 Singlish sentences via Claude API"
-"$PYTHON" 01_text_corpus/generate_singlish.py \
+"$PYTHON" data_generation/01_text_corpus/generate_singlish.py \
     --output outputs/singlish/corpus.jsonl \
     --count 10 \
     --batch-size 10
@@ -52,7 +52,7 @@ for i, r in enumerate(rows, 1):
 # ── Step 2: TTS synthesis ─────────────────────────────────────────────────────
 echo ""
 echo ">>> Step 2: Synthesize audio (edge-tts: en-SG-LunaNeural + en-SG-WayneNeural)"
-"$PYTHON" 02_tts_synthesis/synthesize.py \
+"$PYTHON" data_generation/02_tts_synthesis/synthesize.py \
     --corpus outputs/singlish/corpus.jsonl \
     --output-dir outputs/singlish/clean \
     --lang en \
@@ -65,10 +65,10 @@ echo "    WAV files created: $WAV_COUNT"
 # ── Step 3: Augmentation ──────────────────────────────────────────────────────
 echo ""
 echo ">>> Step 3: Augmentation (1 variant per file)"
-"$PYTHON" 03_augmentation/augment.py \
+"$PYTHON" data_generation/03_augmentation/augment.py \
     --input-dir outputs/singlish/clean \
     --output-dir outputs/singlish/augmented \
-    --noise-bank 03_augmentation/noise_bank \
+    --noise-bank data_generation/03_augmentation/noise_bank \
     --variants 1
 
 AUG_COUNT=$(ls outputs/singlish/augmented/*.wav 2>/dev/null | wc -l | tr -d ' ')
@@ -77,7 +77,7 @@ echo "    Augmented WAV files: $AUG_COUNT"
 # ── Step 4: Quality filter ────────────────────────────────────────────────────
 echo ""
 echo ">>> Step 4: Quality filter (duration sanity only — skip UTMOS + Whisper)"
-"$PYTHON" 04_quality_filter/filter.py \
+"$PYTHON" data_generation/04_quality_filter/filter.py \
     --input-dir outputs/singlish \
     --output outputs/singlish/manifest_filtered.jsonl \
     --lang en \
@@ -87,7 +87,7 @@ echo ">>> Step 4: Quality filter (duration sanity only — skip UTMOS + Whisper)
 # ── Step 5: Export ────────────────────────────────────────────────────────────
 echo ""
 echo ">>> Step 5: Export to NeMo manifest"
-"$PYTHON" 06_dataset_export/export_nemo_manifest.py \
+"$PYTHON" data_generation/06_dataset_export/export_nemo_manifest.py \
     --input outputs/singlish/manifest_filtered.jsonl \
     --output outputs/singlish/train_manifest.json
 

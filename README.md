@@ -39,42 +39,54 @@ For the legacy Vietnamese / Singlish full pipeline (Fish Speech voice-bank route
 
 ## Directory Structure
 
+This is a research repo; **synthetic data generation is one subset of it**, scoped under
+`data_generation/`. Model training and the scaling-laws evaluation live under `benchmark/`.
+
 ```
-01_text_corpus/          # OpenAI-generated sentence corpora
-  lexicons/              # Per-language vocab CSVs
-  prompts/               # System prompts (one per lang, plus short/long for zh+hi)
-  generate_singlish.py
-  generate_vietnamese.py
-  generate_chinese.py    # --length-target {short,long}
-  generate_hindi.py      # --length-target {short,long}
+data_generation/         # Synthetic ASR data pipeline (text → audio → manifest)
+  01_text_corpus/        # OpenAI-generated sentence corpora
+    lexicons/            # Per-language vocab CSVs
+    prompts/             # System prompts (one per lang, plus short/long for zh+hi)
+    generate_singlish.py
+    generate_vietnamese.py
+    generate_chinese.py  # --length-target {short,long}
+    generate_hindi.py    # --length-target {short,long}
+  02_tts_synthesis/      # Text-to-speech synthesis
+    synthesize.py        # Backends: edge | fish | xtts | qwen | minimax | sarvam
+    voice_bank/          # Reference speaker WAVs (only for fish / xtts)
+      singlish/
+      vietnamese/
+  03_augmentation/       # Audio augmentation
+    augment.py           # Noise, reverb, time-stretch, pitch-shift, codec
+    noise_bank/
+      ambient/           # Background noise (MUSAN)
+      rir/               # Room impulse responses
+  04_quality_filter/
+    filter.py            # Duration sanity + UTMOS + roundtrip WER (--qc-asr whisper|qwen2-audio)
+  05_real_data_curation/ # Placeholder (unimplemented)
+  06_dataset_export/
+    export_nemo_manifest.py  # Convert to NeMo JSONL format
+  07_hf_push/
+    push_to_hf.py        # Push curated manifests to HuggingFace Hub
 
-02_tts_synthesis/        # Text-to-speech synthesis
-  synthesize.py          # Backends: edge | fish | xtts | qwen | minimax | sarvam
-  voice_bank/            # Reference speaker WAVs (only for fish / xtts)
-    singlish/
-    vietnamese/
+benchmark/               # Research: ASR finetuning + scaling-laws evaluation
+  train.py  scaling.py  dataset.py  evaluate.py  config.py
 
-03_augmentation/         # Audio augmentation
-  augment.py             # Noise, reverb, time-stretch, pitch-shift, codec
-  noise_bank/
-    ambient/             # Background noise (MUSAN)
-    rir/                 # Room impulse responses
+scripts/                 # Orchestration (run from repo root)
+  run_prototype*.sh      # End-to-end prototype per language
+  run_bulk.sh            # Bulk generation driver
+  config.py              # Shared Pydantic models + PipelineConfig
+  check_env.py           # Preflight environment check
+  download_noise.sh      # Download MUSAN + RIR noise corpora
 
-04_quality_filter/
-  filter.py              # Duration sanity + UTMOS + roundtrip WER (--qc-asr whisper|qwen2-audio)
+docs/                    # BUILDPLAN.md, BULK_GENERATION_PLAN.md
 
-06_dataset_export/
-  export_nemo_manifest.py  # Convert to NeMo JSONL format
-
-outputs/
+outputs/                 # Generated data + benchmark results (gitignored, except stats/)
   singlish/{clean,augmented}/
   vietnamese/{clean,augmented}/
   chinese/{short,long}/{clean,augmented}/
   hindi/{short,long}/{clean,augmented}/
-
-scripts/
-  config.py              # Shared Pydantic models + PipelineConfig
-  download_noise.sh      # Download MUSAN + RIR noise corpora
+  benchmark/stats/       # Committed scaling-laws CSVs + plots
 ```
 
 ## Output

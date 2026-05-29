@@ -53,7 +53,7 @@ run_bucket () {
 
     # ── Step 1: Generate text corpus ─────────────────────────────────────────
     echo ">>> [1/5] Generate $COUNT Chinese sentences ($LENGTH-form)"
-    "$PYTHON" 01_text_corpus/generate_chinese.py \
+    "$PYTHON" data_generation/01_text_corpus/generate_chinese.py \
         --output "$OUT/corpus.jsonl" \
         --count "$COUNT" \
         --batch-size 10 \
@@ -70,7 +70,7 @@ for i, r in enumerate(rows[:3], 1):
     # ── Step 2: TTS synthesis ────────────────────────────────────────────────
     echo ""
     echo ">>> [2/5] Synthesize via $TTS_BACKEND TTS (2 voices/sentence)"
-    "$PYTHON" 02_tts_synthesis/synthesize.py \
+    "$PYTHON" data_generation/02_tts_synthesis/synthesize.py \
         --corpus "$OUT/corpus.jsonl" \
         --output-dir "$OUT/clean" \
         --lang "$LANG_CODE" \
@@ -83,10 +83,10 @@ for i, r in enumerate(rows[:3], 1):
     # ── Step 3: Augmentation ─────────────────────────────────────────────────
     echo ""
     echo ">>> [3/5] Augmentation (1 variant per file)"
-    "$PYTHON" 03_augmentation/augment.py \
+    "$PYTHON" data_generation/03_augmentation/augment.py \
         --input-dir "$OUT/clean" \
         --output-dir "$OUT/augmented" \
-        --noise-bank 03_augmentation/noise_bank \
+        --noise-bank data_generation/03_augmentation/noise_bank \
         --variants 1
 
     AUG_COUNT=$(ls "$OUT/augmented"/*.wav 2>/dev/null | wc -l | tr -d ' ')
@@ -95,7 +95,7 @@ for i, r in enumerate(rows[:3], 1):
     # ── Step 4: Quality filter ───────────────────────────────────────────────
     echo ""
     echo ">>> [4/5] Quality filter (duration sanity only — skip UTMOS + ASR)"
-    "$PYTHON" 04_quality_filter/filter.py \
+    "$PYTHON" data_generation/04_quality_filter/filter.py \
         --input-dir "$OUT" \
         --output "$OUT/manifest_filtered.jsonl" \
         --lang "$LANG_CODE" \
@@ -105,7 +105,7 @@ for i, r in enumerate(rows[:3], 1):
     # ── Step 5: Export ───────────────────────────────────────────────────────
     echo ""
     echo ">>> [5/5] Export to NeMo manifest"
-    "$PYTHON" 06_dataset_export/export_nemo_manifest.py \
+    "$PYTHON" data_generation/06_dataset_export/export_nemo_manifest.py \
         --input "$OUT/manifest_filtered.jsonl" \
         --output "$OUT/train_manifest.json"
 
