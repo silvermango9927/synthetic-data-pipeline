@@ -9,3 +9,18 @@ outputs/**/*.jsonl
 outputs/**/*.json
 outputs/**/_hf_staging/
 .claude/
+
+# Large model checkpoints & audio outputs (do not push to git)
+outputs/benchmark/scaling_*/
+outputs/chinese/
+outputs/hindi/
+outputs/vietnamese/
+outputs/singlish/
+outputs/hf_datasets/
+
+# Benchmark stats/plots ARE committed (results artefacts)
+!outputs/benchmark/stats/
+
+# Scratch/debug files
+outputs/test_*.py
+outputs/test_*.txt
