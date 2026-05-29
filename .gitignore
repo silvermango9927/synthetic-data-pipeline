@@ -24,3 +24,9 @@ outputs/hf_datasets/
 # Scratch/debug files
 outputs/test_*.py
 outputs/test_*.txt
+
+# Run logs + snapshot/smoke-test output dirs
+*.log
+*.log.attempt*
+logs/
+outputs.*/
