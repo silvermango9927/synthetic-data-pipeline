@@ -84,14 +84,14 @@ The local repo's `.gitignore` will continue to exclude `outputs/`. The bulk audi
    sudo xcodebuild -license accept   # you run this once
    .venv/bin/pip install 'audiomentations<0.36'   # 0.36+ has numpy-minmax AVX bug on Apple Silicon
    ```
-   Verify by running `03_augmentation/augment.py` on a small sample and confirming the manifest has `"augmentation": "<transform_name>"` instead of `"passthrough"`.
+   Verify by running `data_generation/03_augmentation/augment.py` on a small sample and confirming the manifest has `"augmentation": "<transform_name>"` instead of `"passthrough"`.
 
-2. **Add resumability** to `02_tts_synthesis/synthesize.py`:
+2. **Add resumability** to `data_generation/02_tts_synthesis/synthesize.py`:
    - Skip sentence/voice pairs whose output WAV already exists on disk.
    - Append-only writes to `manifest_clean.jsonl` (don't rewrite).
    - New `--resume` flag (default on).
 
-3. **Add a worker pool** to `02_tts_synthesis/synthesize.py`:
+3. **Add a worker pool** to `data_generation/02_tts_synthesis/synthesize.py`:
    - New `--workers N` flag (default 4).
    - Use `concurrent.futures.ThreadPoolExecutor` for I/O-bound TTS calls.
    - Edge-tts is `asyncio`-native already; wrap in a queue with N tasks in flight.
@@ -100,7 +100,7 @@ The local repo's `.gitignore` will continue to exclude `outputs/`. The bulk audi
 4. **Deterministic voice rotation** in `synthesize.py`:
    - Replace `random.sample(voices, k=n)` with a `(idx, voice_idx) → voice` mapping so each voice gets `(total_clips / n_voices)` ± 1 samples across the run.
 
-5. **HF push step** as a new file `07_hf_push/push_to_hf.py`:
+5. **HF push step** as a new file `data_generation/07_hf_push/push_to_hf.py`:
    - Reads `outputs/{lang}/{bucket}/{clean|augmented}/manifest_*.jsonl`.
    - Uses `huggingface_hub.HfApi` and `upload_folder` to push WAVs + a rewritten manifest.
    - Computes train/val split deterministically (hash of sentence id).
@@ -144,7 +144,7 @@ Every step is safe to re-run from any failure point:
 - **Text gen fails midway** → corpus.jsonl is partial; re-run with the same `--count`; dedup keeps unique sentences.
 - **TTS fails midway** (the Sarvam-credits-ran-out case) → `--resume` skips existing WAVs; re-run after topping up. Manifest is append-only.
 - **Augmentation fails** → re-run; existing aug WAVs are reused.
-- **HF push fails** → re-run `07_hf_push/push_to_hf.py`; `upload_folder` diffs and only sends changes.
+- **HF push fails** → re-run `data_generation/07_hf_push/push_to_hf.py`; `upload_folder` diffs and only sends changes.
 
 ## Verification checklist (after the run)
 

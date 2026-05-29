@@ -127,7 +127,7 @@ def generate_batch(
 @click.option("--batch-size", default=20, help="Sentences per API call")
 @click.option(
     "--lexicon",
-    default="01_text_corpus/lexicons/vietnamese_tonal.csv",
+    default="data_generation/01_text_corpus/lexicons/vietnamese_tonal.csv",
     help="Lexicon CSV path",
 )
 @click.option(
@@ -142,7 +142,7 @@ def main(output: str, count: int, batch_size: int, lexicon: str, skip_reference:
     lex = load_lexicon(lexicon)
     terms = [row["term"] for row in lex]
 
-    system_prompt = Path("01_text_corpus/prompts/vietnamese_system.txt").read_text()
+    system_prompt = Path("data_generation/01_text_corpus/prompts/vietnamese_system.txt").read_text()
 
     reference_pool: list[str] = []
     if not skip_reference:

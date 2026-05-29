@@ -1,9 +1,9 @@
 """Fallback augmenter using librosa + scipy when audiomentations won't build.
 
-Mirrors the non-noise/non-RIR transforms in 03_augmentation/augment.py:
+Mirrors the non-noise/non-RIR transforms in data_generation/03_augmentation/augment.py:
 time-stretch, pitch-shift, gain, bandpass, light additive noise.
 Use this only when audiomentations is unavailable; the canonical pipeline is
-03_augmentation/augment.py.
+data_generation/03_augmentation/augment.py.
 """
 import json
 import random

@@ -45,7 +45,7 @@ class PipelineConfig(BaseModel):
     snr_range: tuple[float, float] = (10.0, 25.0)
 
     # Paths
-    noise_bank: Path = Path("03_augmentation/noise_bank")
+    noise_bank: Path = Path("data_generation/03_augmentation/noise_bank")
     output_base: Path = Path("outputs")
 
 

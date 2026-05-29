@@ -84,12 +84,12 @@ def main() -> int:
     # ── Directory structure ────────────────────────────────────────────────────
     print("\nDirectory structure:")
     required_dirs = [
-        "01_text_corpus/lexicons",
-        "01_text_corpus/prompts",
-        "02_tts_synthesis/voice_bank/singlish",
-        "02_tts_synthesis/voice_bank/vietnamese",
-        "03_augmentation/noise_bank/ambient",
-        "03_augmentation/noise_bank/rir",
+        "data_generation/01_text_corpus/lexicons",
+        "data_generation/01_text_corpus/prompts",
+        "data_generation/02_tts_synthesis/voice_bank/singlish",
+        "data_generation/02_tts_synthesis/voice_bank/vietnamese",
+        "data_generation/03_augmentation/noise_bank/ambient",
+        "data_generation/03_augmentation/noise_bank/rir",
         "outputs/singlish/clean",
         "outputs/singlish/augmented",
         "outputs/vietnamese/clean",
@@ -105,7 +105,7 @@ def main() -> int:
     # ── Voice bank (soft — only needed for fish/xtts) ─────────────────────────
     print("\nVoice bank (only needed for --backend fish or xtts):")
     for lang in ("singlish", "vietnamese"):
-        vb = Path(f"02_tts_synthesis/voice_bank/{lang}")
+        vb = Path(f"data_generation/02_tts_synthesis/voice_bank/{lang}")
         wavs = list(vb.glob("*.wav")) + list(vb.glob("*.mp3")) + list(vb.glob("*.flac"))
         if wavs:
             ok(f"voice_bank/{lang}", f"{len(wavs)} file(s)")
@@ -115,7 +115,7 @@ def main() -> int:
     # ── Noise bank (soft — augment.py degrades gracefully) ────────────────────
     print("\nNoise bank (optional — augment.py degrades gracefully without it):")
     for subdir in ("ambient", "rir"):
-        nb = Path(f"03_augmentation/noise_bank/{subdir}")
+        nb = Path(f"data_generation/03_augmentation/noise_bank/{subdir}")
         wavs = list(nb.glob("*.wav"))
         if wavs:
             ok(f"noise_bank/{subdir}", f"{len(wavs)} file(s)")

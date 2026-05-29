@@ -78,7 +78,7 @@ def build_augmentation_pipeline(noise_bank: str):
 @click.command()
 @click.option("--input-dir", required=True, help="Directory with clean WAVs")
 @click.option("--output-dir", required=True, help="Output directory for augmented WAVs")
-@click.option("--noise-bank", default="03_augmentation/noise_bank", help="Noise bank directory")
+@click.option("--noise-bank", default="data_generation/03_augmentation/noise_bank", help="Noise bank directory")
 @click.option("--variants", default=2, help="Number of augmented variants per clean file")
 @click.option("--sample-rate", default=16000, help="Target sample rate")
 def main(input_dir: str, output_dir: str, noise_bank: str, variants: int, sample_rate: int):
