@@ -84,13 +84,13 @@ def train_asr(cfg: TrainConfig):
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float16 if (cfg.fp16 and torch.cuda.is_available()) else torch.float32
+            torch_dtype=torch.float32
         )
     else:  # whisper
         model = WhisperForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float16 if (cfg.fp16 and torch.cuda.is_available()) else torch.float32
+            torch_dtype=torch.float32
         )
         # Configure model generation configs
         model.config.forced_decoder_ids = None
