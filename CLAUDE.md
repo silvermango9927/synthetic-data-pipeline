@@ -137,9 +137,10 @@ Once `audiomentations<0.36` + `pydub` are installed (see Environment), augment a
   --output-dir outputs/chinese/short/augmented \
   --variants 2
 ```
-- Default 2 variants per clean clip. WAVs land alongside the clean ones; `manifest_augmented.jsonl` records `variant_0` / `variant_1`.
-- Verify it actually augmented (vs silently passing through): `grep -c '"augmentation": "passthrough"' outputs/<lang>/<bucket>/augmented/manifest_augmented.jsonl` should return `0`.
-- Empty `noise_bank/{ambient,rir}` means noise + reverb stages are skipped (warning, not error). Drop MUSAN into `data_generation/03_augmentation/noise_bank/ambient/` and RIRS_NOISES into `data_generation/03_augmentation/noise_bank/rir/` to enable them.
+- Default 2 variants per clean clip. WAVs land alongside the clean ones; `manifest_augmented.jsonl` records, per clip, exactly which transforms fired and their params (e.g. `AddBackgroundNoise(snr_db=14.1,...);Gain(...)`). Reproducible via `--seed` (default 42, logged in the manifest).
+- Verify it actually augmented (vs silently passing through): the `augmentation` field should never be `passthrough`/`none`. Confirm noise/reverb fired: `grep -o '"augmentation": "[^"]*"' .../manifest_augmented.jsonl | tr ';' '\n' | grep -oE '[A-Za-z]+\(' | sort | uniq -c`.
+- Empty `noise_bank/{ambient,rir}` means noise + reverb stages are skipped (warning, not error). **Populate it with `bash scripts/download_noise_bank.sh`** (MUSAN → `ambient/`, RIRS_NOISES → `rir/`). Pass `--require-noise` to make a run fail loudly if the bank is empty instead of producing un-noised data.
+- **Design + research-standardness writeup: [docs/AUGMENTATION_DESIGN.md](docs/AUGMENTATION_DESIGN.md).**
 
 No-deps fallback (when audiomentations won't install): `scripts/augment_simple.py` mirrors the non-noise/non-RIR transforms using only librosa + scipy + numpy. Same CLI shape:
 ```bash
@@ -168,8 +169,8 @@ No-deps fallback (when audiomentations won't install): `scripts/augment_simple.p
 
 ## Known issues / tripwires
 
-- `audiomentations` ≥0.36 fails to install on Apple Silicon (numpy-minmax AVX/arm64 bug — *not* an Xcode license issue, despite the install spam). Pin `audiomentations<0.36`. Pipeline degrades to pass-through (literal file copies labeled `"augmentation": "passthrough"`) if the import fails — silent, easy to miss. Always grep the augmented manifest after stage 03 to confirm.
-- `Mp3Compression` in audiomentations requires `pydub` + `ffmpeg`. Without `pydub` the whole `Compose` raises mid-loop, leaving the augmented dir in a partial state (manifest never written). Install pydub before running.
+- `audiomentations` ≥0.36 fails to install on Apple Silicon (numpy-minmax AVX/arm64 bug — *not* an Xcode license issue, despite the install spam). Pin `audiomentations<0.36`. Pipeline degrades to pass-through (literal file copies labeled `"augmentation": "passthrough"`) if the import fails — silent, easy to miss. Always grep the augmented manifest after stage 03 to confirm; or pass `--require-noise` to fail loudly.
+- `Mp3Compression` in audiomentations requires `pydub` + `ffmpeg`. `augment.py` now detects a missing `pydub` and drops just that transform with a warning (it used to crash the whole `Compose` mid-loop). Still install `pydub` to get codec augmentation.
 - AISHELL streaming download is large; first run pulls metadata. Use `--skip-reference` for offline iteration.
 - FLEURS `hi_in` config name uses underscore (`hi_in`), not hyphen.
 - Sarvam max 2,500 chars per call — long-form Hindi (~110 words ≈ 600 chars) fits fine.
