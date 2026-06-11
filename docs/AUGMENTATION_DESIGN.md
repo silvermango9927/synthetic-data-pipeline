@@ -10,6 +10,62 @@ design lines up with standard practice in the ASR literature.
 
 ---
 
+## 0. Before you run (prerequisites)
+
+Pre-flight checklist for a stage-03 run, in order:
+
+1. **Install the augmentation deps.** On Apple Silicon pin `<0.36` (≥0.36 fails to
+   build — see §7):
+   ```bash
+   .venv/bin/pip install 'audiomentations<0.36' pydub
+   ```
+   `ffmpeg` must be on `PATH` (`which ffmpeg`) — `Mp3Compression` shells out to it.
+   Confirm both import:
+   ```bash
+   .venv/bin/python -c "import audiomentations, pydub; print('ok')"
+   ```
+   If `audiomentations` is missing the run becomes a pass-through file copy; if
+   `pydub` is missing only the MP3 stage is dropped (with a warning).
+
+2. **Populate the noise bank** (one-time, ≈24 GB download). Without this, noise +
+   reverb are silently skipped and you get only speed/pitch/gain/codec:
+   ```bash
+   bash scripts/download_noise_bank.sh
+   # quick smoke test instead of the full pull:
+   MAX_AMBIENT=200 MAX_RIR=200 bash scripts/download_noise_bank.sh
+   ```
+   Verify both dirs hold WAVs:
+   ```bash
+   ls data_generation/03_augmentation/noise_bank/ambient/*.wav | wc -l
+   ls data_generation/03_augmentation/noise_bank/rir/*.wav | wc -l
+   ```
+
+3. **Confirm stage-02 output exists.** The `--input-dir` must hold 16 kHz mono
+   clean WAVs *and* a `manifest_clean.jsonl`, so transcripts and voice IDs carry
+   through to the augmented manifest.
+
+4. **Choose run parameters.** `--variants` (copies per clean clip), `--seed`
+   (default 42, logged in every row), and the SNR floor for difficulty
+   (`--min-snr-db`; lower = noisier — see §5.2).
+
+5. **Run with the guardrail on** so an empty/misconfigured bank fails loudly
+   instead of producing un-noised "augmented" data:
+   ```bash
+   .venv/bin/python data_generation/03_augmentation/augment.py \
+     --input-dir outputs/<lang>/<bucket>/clean \
+     --output-dir outputs/<lang>/<bucket>/augmented \
+     --variants 1 --require-noise
+   ```
+
+6. **Verify after the run** that noise/reverb actually fired:
+   ```bash
+   grep -o '"augmentation": "[^"]*"' outputs/<lang>/<bucket>/augmented/manifest_augmented.jsonl \
+     | tr ';' '\n' | grep -oE '[A-Za-z]+\(' | sort | uniq -c
+   ```
+   `AddBackgroundNoise(` and `ApplyImpulseResponse(` should appear in the counts.
+
+---
+
 ## 1. Why augment at all?
 
 Our audio is synthetic (edge-tts, MiniMax, Sarvam, Qwen). TTS output is *clean*:
@@ -46,6 +102,100 @@ bank is populated; see §4.
 
 **Audio invariant:** input and output are 16 kHz mono WAV (pipeline-wide
 invariant, see `CLAUDE.md`). MUSAN is already 16 kHz mono; RIRs are WAV.
+
+### 2.1 Mathematical formulation
+
+Let the clean clip be a discrete signal $x[n]$, $n = 0,\dots,N-1$, sampled at
+$f_s = 16\,\text{kHz}$. Each transform $T_i$ maps a waveform to a waveform.
+
+**Per-transform Bernoulli gate.** Transform $i$ fires with probability $p_i$ via a
+switch $b_i \sim \mathrm{Bernoulli}(p_i)$, with parameters $\theta_i$ drawn
+uniformly from the ranges in the table above:
+
+$$
+T_i^{b_i}(x) =
+\begin{cases}
+T_i(x;\theta_i), & b_i = 1\\[2pt]
+x, & b_i = 0
+\end{cases}
+$$
+
+**Full pipeline** — the randomized composition, applied in table order:
+
+$$
+y = \big(T_7^{b_7}\circ T_6^{b_6}\circ\cdots\circ T_1^{b_1}\big)(x)
+$$
+
+The individual operators:
+
+**(1) Background noise** — additive, scaled to a target SNR
+$\gamma\sim U(10,25)\,\text{dB}$. With signal RMS
+$\mathrm{RMS}(x)=\sqrt{\tfrac1N\sum_n x[n]^2}$ and a noise clip $d[n]$:
+
+$$
+y[n] = x[n] + g\,d[n],
+\qquad
+g = \frac{\mathrm{RMS}(x)}{\mathrm{RMS}(d)}\;10^{-\gamma/20}
+$$
+
+chosen so that $20\log_{10}\!\dfrac{\mathrm{RMS}(x)}{\mathrm{RMS}(g\,d)} = \gamma$.
+
+**(2) Reverberation** — convolution with a room impulse response $h[n]$ of length
+$L$:
+
+$$
+y[n] = (x * h)[n] = \sum_{k=0}^{L-1} h[k]\,x[n-k]
+$$
+
+**(3) Time-stretch** — tempo change by rate $r\sim U(0.9,1.1)$ at **constant
+pitch** (phase vocoder). In the STFT domain $X[m,\omega]$ (frame $m$) the time axis
+is rescaled while frequency bins are preserved:
+
+$$
+Y[m,\omega] = X\!\left[\,m/r,\;\omega\,\right],
+\qquad N' = \left\lfloor N/r \right\rfloor
+$$
+
+(magnitudes interpolated across frames, phases re-accumulated). Duration scales by
+$1/r$; pitch is unchanged — this is the key difference from resample-based "speed
+perturbation" (§5.1).
+
+**(4) Pitch-shift** — by $s\sim U(-2,2)$ semitones, ratio $\rho = 2^{\,s/12}$.
+Realized as time-stretch by $\rho$ followed by resampling by $\rho$ (net duration
+unchanged); spectral content is scaled in frequency:
+
+$$
+Y(\omega) \approx X(\omega/\rho)
+$$
+
+**(5) Gain** — scalar multiply by $a\sim U(-6,6)\,\text{dB}$:
+
+$$
+y[n] = 10^{\,a/20}\,x[n]
+$$
+
+**(6) MP3 compression** — lossy encode/decode at bitrate
+$b\sim U(32,64)\,\text{kbps}$. No closed form (psychoacoustic quantization); an
+encode/decode operator pair:
+
+$$
+y = \mathcal{D}\big(\mathcal{E}_b(x)\big)
+$$
+
+**(7) Band-pass filter** — linear filter with passband around
+$f_c\sim U(200,4000)\,\text{Hz}$:
+
+$$
+Y(f) = H_{\mathrm{bp}}(f)\,X(f),
+\qquad
+H_{\mathrm{bp}}(f)\approx \mathbb{1}\!\left[f_\text{low}\le f \le f_\text{high}\right]
+$$
+
+(realized as an IIR filter, so the band edges roll off rather than being ideal).
+
+Every operator is **label-preserving**: the transcript attached to $y$ is identical
+to that of $x$, which is what makes augmentation a valid way to expand training
+data.
 
 ---
 
