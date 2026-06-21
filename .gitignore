@@ -20,6 +20,7 @@ outputs/hf_datasets/
 
 # Benchmark stats/plots ARE committed (results artefacts)
 !outputs/benchmark/stats/
+!outputs/benchmark/normalized_stats/
 
 # Scratch/debug files
 outputs/test_*.py
