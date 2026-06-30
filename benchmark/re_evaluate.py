@@ -203,6 +203,7 @@ def re_evaluate_sweeps(lang: str, model_type: str = "whisper", data_type: str = 
         plt.xlabel("Dataset Size (Hours of Audio)", fontsize=12)
         plt.ylabel("Error Rate (%)", fontsize=12)
         plt.grid(True, linestyle="--", alpha=0.6)
+        plt.ylim(0, 55)
         plt.legend(fontsize=11)
         
         plot_path = output_dir / f"scaling_{lang}_{model_type}_{data_type}.png"

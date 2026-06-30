@@ -40,6 +40,7 @@ def plot_gradients_for_lang(lang: str):
     axes[0].set_xlabel('Dataset Size (Hours)', fontsize=10)
     axes[0].set_ylabel('Error Rate (%)', fontsize=10)
     axes[0].grid(True, linestyle='--', alpha=0.6)
+    axes[0].set_ylim(0, 55)
     axes[0].legend(fontsize=10)
 
     # Panel 2: First Derivative (Gradient)
