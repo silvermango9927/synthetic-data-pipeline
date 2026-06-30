@@ -51,6 +51,7 @@ def plot_gradients_for_lang(lang: str):
     axes[1].set_xlabel('Dataset Size (Hours)', fontsize=10)
     axes[1].set_ylabel('Change per Hour (% / h)', fontsize=10)
     axes[1].grid(True, linestyle='--', alpha=0.6)
+    axes[1].set_ylim(-11, 2)
     axes[1].legend(fontsize=10)
 
     # Panel 3: Second Derivative (Curvature / Acceleration)
@@ -61,6 +62,7 @@ def plot_gradients_for_lang(lang: str):
     axes[2].set_xlabel('Dataset Size (Hours)', fontsize=10)
     axes[2].set_ylabel('Rate of Change per Hour (% / h²)', fontsize=10)
     axes[2].grid(True, linestyle='--', alpha=0.6)
+    axes[2].set_ylim(-1, 3)
     axes[2].legend(fontsize=10)
 
     plt.suptitle(f"ASR Scaling Laws Gradient Analysis - {lang.upper()} (Whisper-Tiny)", fontsize=16, fontweight='bold', y=1.02)
