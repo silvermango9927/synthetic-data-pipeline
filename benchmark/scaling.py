@@ -27,6 +27,8 @@ def run_scaling_sweep(
     batch_size: int = 4,
     learning_rate: float = 5e-5,
     use_lora: bool = True,
+    load_in_8bit: bool = False,
+    load_in_4bit: bool = False,
     device: str = "cuda",
     fractions = [0.1, 0.25, 0.5, 1.0]
 ):
@@ -84,6 +86,8 @@ def run_scaling_sweep(
             batch_size=batch_size,
             learning_rate=learning_rate,
             use_lora=use_lora,
+            load_in_8bit=load_in_8bit,
+            load_in_4bit=load_in_4bit,
             device=device,
             output_dir=sweep_output_dir,
             logging_steps=5
@@ -159,6 +163,8 @@ def run_scaling_sweep(
 @click.option("--batch-size", default=4, type=int)
 @click.option("--lr", "learning_rate", default=5e-5, type=float)
 @click.option("--use-lora/--no-lora", default=True)
+@click.option("--load-in-8bit", is_flag=True, default=False)
+@click.option("--load-in-4bit", is_flag=True, default=False)
 @click.option("--device", default="cuda")
 @click.option("--fractions", default="0.1,0.25,0.5,1.0")
 @click.option("--dataset-name", default=None)

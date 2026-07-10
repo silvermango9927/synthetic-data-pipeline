@@ -70,6 +70,12 @@ def train_asr(cfg: TrainConfig):
     print(f"Loading pre-trained model: {cfg.model_name}...")
     device_map = "auto" if cfg.device == "cuda" and torch.cuda.is_available() else None
     
+    quant_kwargs = {}
+    if cfg.load_in_8bit:
+        quant_kwargs["load_in_8bit"] = True
+    elif cfg.load_in_4bit:
+        quant_kwargs["load_in_4bit"] = True
+        
     if cfg.model_type == "ctc":
         # CTC models require target vocab size
         vocab_size = len(processor.tokenizer)
@@ -78,29 +84,32 @@ def train_asr(cfg: TrainConfig):
             ctc_loss_reduction="mean",
             pad_token_id=processor.tokenizer.pad_token_id,
             vocab_size=vocab_size,
-            device_map=device_map
+            device_map=device_map,
+            **quant_kwargs
         )
     elif cfg.model_type == "qwen":
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float32
+            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit) else torch.float32,
+            **quant_kwargs
         )
     else:  # whisper
         model = WhisperForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float32
+            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit) else torch.float32,
+            **quant_kwargs
         )
         # Configure model generation configs
         model.config.forced_decoder_ids = None
         model.config.suppress_tokens = []
         
     # 4. Integrate PEFT / LoRA
-    if cfg.use_lora and cfg.model_type != "whisper":
+    if cfg.use_lora:
         print("Integrating Parameter-Efficient Fine-Tuning (LoRA)...")
         # Handle kbit training setup for Qwen/large models if using quantization
-        if cfg.device == "cuda" and cfg.model_type == "qwen":
+        if cfg.device == "cuda" and (cfg.load_in_8bit or cfg.load_in_4bit):
             model = prepare_model_for_kbit_training(model)
             
         peft_config = LoraConfig(
@@ -190,6 +199,8 @@ def train_asr(cfg: TrainConfig):
 @click.option("--batch-size", default=4, type=int)
 @click.option("--lr", "learning_rate", default=5e-5, type=float)
 @click.option("--use-lora/--no-lora", default=True)
+@click.option("--load-in-8bit", is_flag=True, default=False)
+@click.option("--load-in-4bit", is_flag=True, default=False)
 @click.option("--device", default="cuda")
 @click.option("--output-dir", default="outputs/benchmark/checkpoints")
 @click.option("--dataset-name", default=None, help="Optionally override default HF dataset ID")

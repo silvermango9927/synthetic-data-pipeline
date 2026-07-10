@@ -25,15 +25,29 @@ def evaluate_asr(
     # 2. Load fine-tuned processor and model
     print("Loading model and processor...")
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
-    if model_type == "ctc":
-        processor = Wav2Vec2Processor.from_pretrained(model_path)
-        model = AutoModelForCTC.from_pretrained(model_path).to(device)
-    elif model_type == "qwen":
+    
+    if os.path.exists(os.path.join(model_path, "adapter_config.json")):
+        print("PEFT adapter found. Loading base model with adapters...")
+        from peft import PeftConfig, PeftModel
+        peft_config = PeftConfig.from_pretrained(model_path)
+        base_model_name = peft_config.base_model_name_or_path
+        
         processor = AutoProcessor.from_pretrained(model_path)
-        model = Qwen2AudioForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch_dtype).to(device)
-    else:  # whisper
-        processor = AutoProcessor.from_pretrained(model_path)
-        model = WhisperForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch_dtype).to(device)
+        if model_type == "qwen":
+            base_model = Qwen2AudioForConditionalGeneration.from_pretrained(base_model_name, torch_dtype=torch_dtype)
+        else:
+            base_model = WhisperForConditionalGeneration.from_pretrained(base_model_name, torch_dtype=torch_dtype)
+        model = PeftModel.from_pretrained(base_model, model_path).to(device)
+    else:
+        if model_type == "ctc":
+            processor = Wav2Vec2Processor.from_pretrained(model_path)
+            model = AutoModelForCTC.from_pretrained(model_path).to(device)
+        elif model_type == "qwen":
+            processor = AutoProcessor.from_pretrained(model_path)
+            model = Qwen2AudioForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch_dtype).to(device)
+        else:  # whisper
+            processor = AutoProcessor.from_pretrained(model_path)
+            model = WhisperForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch_dtype).to(device)
         
     model.eval()
     
