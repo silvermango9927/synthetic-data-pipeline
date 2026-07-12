@@ -38,11 +38,12 @@ def evaluate_asr(
         else:
             base_model = WhisperForConditionalGeneration.from_pretrained(base_model_name, torch_dtype=torch_dtype)
             
-            # Monkey-patch forward method to pop 'input_ids' passed by PEFT
-            # to prevent TypeError: WhisperDecoder() got multiple values for keyword argument 'input_ids'
+            # Monkey-patch forward method to pop 'input_ids' and 'inputs_embeds' passed by PEFT
+            # to prevent TypeError: WhisperDecoder() got multiple values for keyword arguments
             old_forward = base_model.forward
             def patched_forward(*args, **kwargs):
                 kwargs.pop("input_ids", None)
+                kwargs.pop("inputs_embeds", None)
                 return old_forward(*args, **kwargs)
             base_model.forward = patched_forward
             
