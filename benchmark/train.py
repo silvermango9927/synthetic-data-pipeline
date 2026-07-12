@@ -63,6 +63,7 @@ def train_asr(cfg: TrainConfig):
     tokenized_dataset = dataset.map(
         preprocess_fn,
         remove_columns=dataset["train"].column_names,
+        load_from_cache_file=False,
         desc="Tokenizing dataset"
     )
     
