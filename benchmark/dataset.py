@@ -165,6 +165,8 @@ class ASRDataCollator:
         self.model_type = model_type
         
     def __call__(self, features):
+        if features and len(features) > 0:
+            print(f"[DEBUG] ASRDataCollator keys: {list(features[0].keys())}")
         # Extract features (spectrograms / raw waveforms)
         if self.model_type == "ctc":
             input_features = [{"input_values": feature["input_values"]} for feature in features]
