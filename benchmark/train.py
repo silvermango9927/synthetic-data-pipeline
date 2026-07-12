@@ -160,7 +160,8 @@ def train_asr(cfg: TrainConfig):
             logging_steps=cfg.logging_steps,
             fp16=cfg.fp16 and torch.cuda.is_available(),
             save_total_limit=cfg.save_total_limit,
-            report_to="none"
+            report_to="none",
+            remove_unused_columns=False
         )
         trainer = Trainer(
             model=model,
@@ -184,7 +185,8 @@ def train_asr(cfg: TrainConfig):
             logging_steps=cfg.logging_steps,
             fp16=cfg.fp16 and torch.cuda.is_available(),
             save_total_limit=cfg.save_total_limit,
-            report_to="none"
+            report_to="none",
+            remove_unused_columns=False
         )
         trainer = Seq2SeqTrainer(
             model=model,
