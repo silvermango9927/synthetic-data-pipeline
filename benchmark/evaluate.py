@@ -37,6 +37,15 @@ def evaluate_asr(
             base_model = Qwen2AudioForConditionalGeneration.from_pretrained(base_model_name, torch_dtype=torch_dtype)
         else:
             base_model = WhisperForConditionalGeneration.from_pretrained(base_model_name, torch_dtype=torch_dtype)
+            
+            # Monkey-patch forward method to pop 'input_ids' passed by PEFT
+            # to prevent TypeError: WhisperDecoder() got multiple values for keyword argument 'input_ids'
+            old_forward = base_model.forward
+            def patched_forward(*args, **kwargs):
+                kwargs.pop("input_ids", None)
+                return old_forward(*args, **kwargs)
+            base_model.forward = patched_forward
+            
         model = PeftModel.from_pretrained(base_model, model_path).to(device)
     else:
         if model_type == "ctc":

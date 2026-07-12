@@ -113,6 +113,14 @@ def train_asr(cfg: TrainConfig):
         model.config.forced_decoder_ids = None
         model.config.suppress_tokens = []
         
+        # Monkey-patch forward method to pop 'input_ids' passed by PEFT
+        # to prevent TypeError: WhisperDecoder() got multiple values for keyword argument 'input_ids'
+        old_forward = model.forward
+        def patched_forward(*args, **kwargs):
+            kwargs.pop("input_ids", None)
+            return old_forward(*args, **kwargs)
+        model.forward = patched_forward
+        
     # 4. Integrate PEFT / LoRA
     if cfg.use_lora:
         print("Integrating Parameter-Efficient Fine-Tuning (LoRA)...")
