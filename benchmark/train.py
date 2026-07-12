@@ -70,11 +70,19 @@ def train_asr(cfg: TrainConfig):
     print(f"Loading pre-trained model: {cfg.model_name}...")
     device_map = "auto" if cfg.device == "cuda" and torch.cuda.is_available() else None
     
+    from transformers import BitsAndBytesConfig
     quant_kwargs = {}
-    if cfg.load_in_8bit:
-        quant_kwargs["load_in_8bit"] = True
-    elif cfg.load_in_4bit:
-        quant_kwargs["load_in_4bit"] = True
+    if cfg.load_in_8bit or cfg.load_in_4bit:
+        if cfg.load_in_8bit:
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        else:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+        quant_kwargs["quantization_config"] = quantization_config
         
     if cfg.model_type == "ctc":
         # CTC models require target vocab size
