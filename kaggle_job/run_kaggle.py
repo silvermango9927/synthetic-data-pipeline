@@ -2,6 +2,8 @@ import os
 import subprocess
 
 # 1. Install necessary libraries
+print("Uninstalling incompatible libraries...")
+subprocess.run("pip uninstall -y torchao", shell=True)
 print("Installing libraries...")
 subprocess.run("pip install -q transformers accelerate bitsandbytes peft datasets soundfile librosa pandas click jiwer", shell=True)
 
@@ -29,11 +31,16 @@ use_cpu: false
 with open("/root/.cache/huggingface/accelerate/default_config.yaml", "w") as f:
     f.write(config_text.strip())
 
-# 3. Embed PAT token
+# 3. Embed tokens
 pat_token = "GH_PAT_PLACEHOLDER"
+hf_token = "HF_TOKEN_PLACEHOLDER"
 
 if not pat_token or pat_token.startswith("GH_PAT_"):
     raise ValueError("Error: GitHub PAT token was not embedded properly!")
+if not hf_token or hf_token.startswith("HF_TOKEN_"):
+    raise ValueError("Error: Hugging Face Token was not embedded properly!")
+
+os.environ["HF_TOKEN"] = hf_token
 
 # 4. Clone private repository using PAT
 print("Cloning private repository...")

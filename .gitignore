@@ -28,6 +28,7 @@ outputs/test_*.txt
 
 # Kaggle secrets
 *github_pat.txt
+*hf_token.txt
 
 # Run logs + snapshot/smoke-test output dirs
 *.log

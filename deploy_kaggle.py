@@ -44,20 +44,25 @@ def main():
             json.dump(meta, f, indent=2)
         print(f"Updated: {metadata_path}")
 
-    # 3. Read PAT token
+    # 3. Read tokens
     pat_path = "kaggle_job/github_pat.txt"
+    hf_token_path = "kaggle_job/hf_token.txt"
     if not os.path.exists(pat_path):
         raise FileNotFoundError(f"Error: {pat_path} not found! Please create it and write your GitHub PAT inside.")
+    if not os.path.exists(hf_token_path):
+        raise FileNotFoundError(f"Error: {hf_token_path} not found! Please create it and write your Hugging Face Access Token inside.")
 
     with open(pat_path, "r", encoding="utf-8") as f:
         pat_token = f.read().strip()
+    with open(hf_token_path, "r", encoding="utf-8") as f:
+        hf_token = f.read().strip()
 
-    # 4. Embed PAT temporarily and push
+    # 4. Embed tokens temporarily and push
     run_kaggle_path = "kaggle_job/run_kaggle.py"
     with open(run_kaggle_path, "r", encoding="utf-8") as f:
         run_kaggle_content = f.read()
 
-    embedded_content = run_kaggle_content.replace("GH_PAT_PLACEHOLDER", pat_token)
+    embedded_content = run_kaggle_content.replace("GH_PAT_PLACEHOLDER", pat_token).replace("HF_TOKEN_PLACEHOLDER", hf_token)
 
     # Write embedded script
     with open(run_kaggle_path, "w", encoding="utf-8") as f:
