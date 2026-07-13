@@ -3,7 +3,7 @@ import subprocess
 
 # 1. Install necessary libraries
 print("Installing libraries...")
-subprocess.run("pip install -q transformers accelerate bitsandbytes peft datasets soundfile librosa pandas click", shell=True)
+subprocess.run("pip install -q transformers accelerate bitsandbytes peft datasets soundfile librosa pandas click jiwer", shell=True)
 
 # 2. Write multi-GPU accelerate config
 print("Configuring accelerate...")
