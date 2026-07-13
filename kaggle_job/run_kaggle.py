@@ -44,4 +44,4 @@ subprocess.run(f"git clone -b benchmark/scaling-laws-results https://{pat_token}
 # 6. Change directory and run the training sweep
 os.chdir("synthetic-data-pipeline")
 print("Starting training sweep...")
-subprocess.run("accelerate launch benchmark/scaling.py --model-name openai/whisper-large-v3-turbo --use-lora --epochs 3 --batch-size 4 --lr 5e-5 --fractions '0.1,0.2,0.4,0.6,0.8,1.0' --lang hi", shell=True)
+subprocess.run("PYTHONPATH=. accelerate launch benchmark/scaling.py --model-name openai/whisper-large-v3-turbo --use-lora --epochs 3 --batch-size 4 --lr 5e-5 --fractions '0.1,0.2,0.4,0.6,0.8,1.0' --lang hi", shell=True)
