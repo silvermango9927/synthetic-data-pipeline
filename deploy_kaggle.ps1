@@ -42,7 +42,7 @@ foreach ($file in $metaFiles) {
     if (Test-Path $file) {
         $content = Get-Content $file -Raw
         $updatedContent = $content -replace "CHANGE_ME_TO_KAGGLE_USERNAME", $username
-        Set-Content $file -Value $updatedContent -Encoding utf8
+        [System.IO.File]::WriteAllText($file, $updatedContent, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host "Updated: $file"
     } else {
         Write-Warning "File not found: $file"
