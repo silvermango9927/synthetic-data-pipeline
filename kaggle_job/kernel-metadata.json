@@ -1,0 +1,17 @@
+{
+  "id": "CHANGE_ME_TO_KAGGLE_USERNAME/whisper-scaling-laws",
+  "title": "whisper-scaling-laws",
+  "code_file": "run_kaggle.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "CHANGE_ME_TO_KAGGLE_USERNAME/synthetic-asr-hi",
+    "CHANGE_ME_TO_KAGGLE_USERNAME/synthetic-asr-zh"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
