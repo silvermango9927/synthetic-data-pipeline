@@ -44,11 +44,7 @@ if not pat_token:
 print("Cloning private repository...")
 subprocess.run(f"git clone -b benchmark/scaling-laws-results https://{pat_token}@github.com/silvermango9927/synthetic-data-pipeline.git", shell=True)
 
-# 5. Link mounted Kaggle datasets to the cloned folder structure
-print("Linking datasets...")
-os.makedirs("synthetic-data-pipeline/outputs/hf_datasets", exist_ok=True)
-subprocess.run("ln -s /kaggle/input/synthetic-asr-hi synthetic-data-pipeline/outputs/hf_datasets/synthetic-asr-hi", shell=True)
-subprocess.run("ln -s /kaggle/input/synthetic-asr-zh synthetic-data-pipeline/outputs/hf_datasets/synthetic-asr-zh", shell=True)
+
 
 # 6. Change directory and run the training sweep
 os.chdir("synthetic-data-pipeline")

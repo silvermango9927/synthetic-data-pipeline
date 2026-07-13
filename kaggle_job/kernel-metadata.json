@@ -1,5 +1,5 @@
 {
-  "id": "CHANGE_ME_TO_KAGGLE_USERNAME/whisper-scaling-laws",
+  "id": "trihuynhviprovcl/whisper-scaling-laws",
   "title": "whisper-scaling-laws",
   "code_file": "run_kaggle.py",
   "language": "python",
@@ -8,10 +8,8 @@
   "enable_gpu": true,
   "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [
-    "CHANGE_ME_TO_KAGGLE_USERNAME/synthetic-asr-hi",
-    "CHANGE_ME_TO_KAGGLE_USERNAME/synthetic-asr-zh"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
 }
+
