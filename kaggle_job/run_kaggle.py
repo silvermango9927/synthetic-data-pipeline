@@ -29,16 +29,11 @@ use_cpu: false
 with open("/root/.cache/huggingface/accelerate/default_config.yaml", "w") as f:
     f.write(config_text.strip())
 
-# 3. Read PAT from the uploaded github_pat.txt
-pat_token = ""
-for path in ["/kaggle/working/github_pat.txt", "github_pat.txt"]:
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            pat_token = f.read().strip()
-        break
+# 3. Embed PAT token
+pat_token = "GH_PAT_PLACEHOLDER"
 
-if not pat_token:
-    raise ValueError("Error: github_pat.txt is missing or empty! Please create it inside kaggle_job/.")
+if not pat_token or pat_token == "GH_PAT_PLACEHOLDER":
+    raise ValueError("Error: GitHub PAT token was not embedded properly!")
 
 # 4. Clone private repository using PAT
 print("Cloning private repository...")

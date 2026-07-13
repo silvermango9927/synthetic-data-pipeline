@@ -50,8 +50,21 @@ foreach ($file in $metaFiles) {
 }
 
 # 5. Push Kernel to Kaggle
-Write-Host "Pushing training kernel to Kaggle..." -ForegroundColor Cyan
-kaggle kernels push -p kaggle_job
+Write-Host "Embedding PAT token into run_kaggle.py..." -ForegroundColor Cyan
+$runKaggleFile = "kaggle_job\run_kaggle.py"
+$runKaggleContent = Get-Content $runKaggleFile -Raw
+$patToken = (Get-Content $patPath -Raw).Trim()
+$embeddedContent = $runKaggleContent -replace "GH_PAT_PLACEHOLDER", $patToken
+[System.IO.File]::WriteAllText($runKaggleFile, $embeddedContent, (New-Object System.Text.UTF8Encoding($false)))
+
+try {
+    Write-Host "Pushing training kernel to Kaggle..." -ForegroundColor Cyan
+    kaggle kernels push -p kaggle_job
+} finally {
+    # Restore the original run_kaggle.py to prevent leaving the PAT token exposed
+    Write-Host "Restoring run_kaggle.py..." -ForegroundColor Cyan
+    [System.IO.File]::WriteAllText($runKaggleFile, $runKaggleContent, (New-Object System.Text.UTF8Encoding($false)))
+}
 
 Write-Host "Deployment completed successfully! Check the status using:" -ForegroundColor Green
 Write-Host "kaggle kernels status $username/whisper-scaling-laws" -ForegroundColor Yellow
