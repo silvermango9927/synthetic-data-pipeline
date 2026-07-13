@@ -32,7 +32,7 @@ with open("/root/.cache/huggingface/accelerate/default_config.yaml", "w") as f:
 # 3. Embed PAT token
 pat_token = "GH_PAT_PLACEHOLDER"
 
-if not pat_token or pat_token == "GH_PAT_PLACEHOLDER":
+if not pat_token or pat_token.startswith("GH_PAT_"):
     raise ValueError("Error: GitHub PAT token was not embedded properly!")
 
 # 4. Clone private repository using PAT
