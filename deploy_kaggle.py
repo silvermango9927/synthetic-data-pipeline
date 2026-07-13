@@ -65,7 +65,7 @@ def main():
 
     try:
         print("Pushing training kernel to Kaggle...")
-        subprocess.run(["kaggle", "kernels", "push", "-p", "kaggle_job"], check=True)
+        subprocess.run(["kaggle", "kernels", "push", "-p", "kaggle_job", "--accelerator", "NvidiaTeslaT4"], check=True)
     finally:
         # Always restore original file
         print("Restoring run_kaggle.py...")
