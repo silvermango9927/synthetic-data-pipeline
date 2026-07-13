@@ -163,6 +163,10 @@ def run_scaling_sweep(
             subprocess.run(["git", "add", csv_path, plot_path], check=True)
             commit_msg = f"chore: auto-update scaling sweep results for fraction {f:.1%}"
             subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+            
+            # Pull with rebase to merge concurrent commits from other notebooks
+            subprocess.run(["git", "pull", "--rebase", "origin", "benchmark/scaling-laws-results"], check=True)
+            
             subprocess.run(["git", "push", "origin", "benchmark/scaling-laws-results"], check=True)
             print(f"🚀 Successfully pushed results for fraction {f:.1%} to GitHub!")
         except Exception as git_err:
