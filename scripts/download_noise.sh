@@ -2,7 +2,7 @@
 # Download noise corpora for augmentation
 set -e
 
-NOISE_DIR="03_augmentation/noise_bank"
+NOISE_DIR="data_generation/03_augmentation/noise_bank"
 mkdir -p "$NOISE_DIR/ambient" "$NOISE_DIR/rir"
 
 echo "=== Downloading MUSAN noise corpus ==="

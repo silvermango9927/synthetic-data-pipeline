@@ -28,3 +28,9 @@ outputs/test_*.txt
 
 # Kaggle secrets
 *github_pat.txt
+
+# Run logs + snapshot/smoke-test output dirs
+*.log
+*.log.attempt*
+logs/
+outputs.*/

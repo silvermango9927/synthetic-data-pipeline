@@ -18,56 +18,56 @@ check-env:
 	$(PYTHON) scripts/check_env.py
 
 generate-text:
-	$(PYTHON)01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 1000
-	$(PYTHON)01_text_corpus/generate_vietnamese.py --output outputs/vietnamese/corpus.jsonl --count 1000
+	$(PYTHON)data_generation/01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 1000
+	$(PYTHON)data_generation/01_text_corpus/generate_vietnamese.py --output outputs/vietnamese/corpus.jsonl --count 1000
 
 synthesize:
-	$(PYTHON)02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en
-	$(PYTHON)02_tts_synthesis/synthesize.py --corpus outputs/vietnamese/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/vietnamese --output-dir outputs/vietnamese/clean --lang vi
+	$(PYTHON)data_generation/02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en
+	$(PYTHON)data_generation/02_tts_synthesis/synthesize.py --corpus outputs/vietnamese/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/vietnamese --output-dir outputs/vietnamese/clean --lang vi
 
 augment:
-	$(PYTHON)03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank 03_augmentation/noise_bank
-	$(PYTHON)03_augmentation/augment.py --input-dir outputs/vietnamese/clean --output-dir outputs/vietnamese/augmented --noise-bank 03_augmentation/noise_bank
+	$(PYTHON)data_generation/03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank data_generation/03_augmentation/noise_bank
+	$(PYTHON)data_generation/03_augmentation/augment.py --input-dir outputs/vietnamese/clean --output-dir outputs/vietnamese/augmented --noise-bank data_generation/03_augmentation/noise_bank
 
 filter:
-	$(PYTHON)04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
-	$(PYTHON)04_quality_filter/filter.py --input-dir outputs/vietnamese --output outputs/vietnamese/manifest_filtered.jsonl --lang vi
+	$(PYTHON)data_generation/04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
+	$(PYTHON)data_generation/04_quality_filter/filter.py --input-dir outputs/vietnamese --output outputs/vietnamese/manifest_filtered.jsonl --lang vi
 
 export:
-	$(PYTHON)06_dataset_export/export_nemo_manifest.py --input outputs/singlish/manifest_filtered.jsonl --output outputs/singlish/train_manifest.json
-	$(PYTHON)06_dataset_export/export_nemo_manifest.py --input outputs/vietnamese/manifest_filtered.jsonl --output outputs/vietnamese/train_manifest.json
+	$(PYTHON)data_generation/06_dataset_export/export_nemo_manifest.py --input outputs/singlish/manifest_filtered.jsonl --output outputs/singlish/train_manifest.json
+	$(PYTHON)data_generation/06_dataset_export/export_nemo_manifest.py --input outputs/vietnamese/manifest_filtered.jsonl --output outputs/vietnamese/train_manifest.json
 
 # Quick prototype: generate 50 sentences, synthesize, filter — end to end
 prototype:
-	$(PYTHON)01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 50
-	$(PYTHON)02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank 02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en --voices-per-sentence 1
-	$(PYTHON)03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank 03_augmentation/noise_bank --variants 1
-	$(PYTHON)04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
+	$(PYTHON)data_generation/01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 50
+	$(PYTHON)data_generation/02_tts_synthesis/synthesize.py --corpus outputs/singlish/corpus.jsonl --voice-bank data_generation/02_tts_synthesis/voice_bank/singlish --output-dir outputs/singlish/clean --lang en --voices-per-sentence 1
+	$(PYTHON)data_generation/03_augmentation/augment.py --input-dir outputs/singlish/clean --output-dir outputs/singlish/augmented --noise-bank data_generation/03_augmentation/noise_bank --variants 1
+	$(PYTHON)data_generation/04_quality_filter/filter.py --input-dir outputs/singlish --output outputs/singlish/manifest_filtered.jsonl --lang en
 	@echo "Done. Check outputs/singlish/manifest_filtered.jsonl"
 
 # Zero-infrastructure prototype: edge-tts (no docker, no voice bank), skip heavy quality filters
 # Runs ~10 Singlish sentences end-to-end. Needs: OPENAI_API_KEY + pip install -e '.[prototype,dev]'
 prototype-edge:
 	@$(PYTHON)scripts/check_env.py
-	$(PYTHON)01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 10 --batch-size 10
-	$(PYTHON)02_tts_synthesis/synthesize.py \
+	$(PYTHON)data_generation/01_text_corpus/generate_singlish.py --output outputs/singlish/corpus.jsonl --count 10 --batch-size 10
+	$(PYTHON)data_generation/02_tts_synthesis/synthesize.py \
 		--corpus outputs/singlish/corpus.jsonl \
 		--output-dir outputs/singlish/clean \
 		--lang en \
 		--backend edge \
 		--voices-per-sentence 2
-	$(PYTHON)03_augmentation/augment.py \
+	$(PYTHON)data_generation/03_augmentation/augment.py \
 		--input-dir outputs/singlish/clean \
 		--output-dir outputs/singlish/augmented \
-		--noise-bank 03_augmentation/noise_bank \
+		--noise-bank data_generation/03_augmentation/noise_bank \
 		--variants 1
-	$(PYTHON)04_quality_filter/filter.py \
+	$(PYTHON)data_generation/04_quality_filter/filter.py \
 		--input-dir outputs/singlish \
 		--output outputs/singlish/manifest_filtered.jsonl \
 		--lang en \
 		--skip-utmos \
 		--skip-whisper
-	$(PYTHON)06_dataset_export/export_nemo_manifest.py \
+	$(PYTHON)data_generation/06_dataset_export/export_nemo_manifest.py \
 		--input outputs/singlish/manifest_filtered.jsonl \
 		--output outputs/singlish/train_manifest.json
 	@echo ""

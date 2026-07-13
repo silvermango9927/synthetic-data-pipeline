@@ -1,10 +1,10 @@
-"""Generate Hindi text corpus using OpenAI API, grounded in real FLEURS hi_in transcripts.
+"""Generate Mandarin Chinese text corpus using OpenAI API, grounded in real AISHELL transcripts.
 
 Two length targets are supported via --length-target:
   short  (8–15 words / ~5s spoken)
   long   (75–110 words / ~30s spoken)
 
-Each target uses its own system prompt under prompts/hindi_{short,long}_system.txt.
+Each target uses its own system prompt under prompts/chinese_{short,long}_system.txt.
 """
 import csv
 import json
@@ -20,21 +20,17 @@ except ImportError:
     raise ImportError("pip install openai")
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv()  # loads OPENAI_API_KEY from .env if present
 
 MODEL = "gpt-4.1"
-# google/fleurs hi_in — Hindi read speech, CC-BY-4.0, ungated, ~3k sentences.
-# FLEURS sentences are pure Hindi (no code-switching); we instruct the LLM
-# to add Hinglish code-switching naturally in the prompt.
-REFERENCE_DATASET = "google/fleurs"
-REFERENCE_CONFIG = "hi_in"
+# AISHELL-1 — Mandarin read speech, Apache-2.0, ungated. Streams cleanly.
+# Used as few-shot grounding so GPT anchors to natural Mandarin phrasing & Hanzi register.
+REFERENCE_DATASET = "AISHELL/AISHELL-1"
 REFERENCE_MAX_SAMPLES = 3000
 
 
-def load_reference_sentences(
-    dataset_id: str, config: str | None, max_samples: int
-) -> list[str]:
-    """Load real Hindi sentences from a HuggingFace dataset.
+def load_reference_sentences(dataset_id: str, max_samples: int) -> list[str]:
+    """Load real Mandarin sentences from a HuggingFace dataset.
 
     Falls back gracefully to an empty list if the datasets library is not
     installed or the dataset cannot be fetched (e.g. offline).
@@ -46,19 +42,16 @@ def load_reference_sentences(
         print("       pip install -e '.[prototype]'")
         return []
 
-    print(f"Loading reference dataset: {dataset_id} ({config}) (streaming, text only) ...")
+    print(f"Loading reference dataset: {dataset_id} (streaming, text only) ...")
     try:
-        if config:
-            ds = load_dataset(dataset_id, config, split="train", streaming=True)
-        else:
-            ds = load_dataset(dataset_id, split="train", streaming=True)
+        ds = load_dataset(dataset_id, split="train", streaming=True)
     except Exception as e:
         print(f"[WARN] Could not load {dataset_id}: {e}")
         print("       Continuing without reference grounding.")
         return []
 
     text_col = None
-    for col in ("transcription", "raw_transcription", "sentence", "text", "transcript"):
+    for col in ("transcription", "sentence", "text", "transcript", "normalized_text"):
         if col in ds.column_names:
             text_col = col
             break
@@ -67,12 +60,12 @@ def load_reference_sentences(
         print(f"[WARN] No recognised text column in {dataset_id}. Columns: {ds.column_names}")
         return []
 
-    ds = ds.select_columns([text_col])
+    ds = ds.select_columns([text_col])  # drop audio column — avoids torchcodec dependency
 
     sentences = []
     for row in ds:
         val = row[text_col]
-        if isinstance(val, str) and len(val.strip()) > 8:
+        if isinstance(val, str) and len(val.strip()) > 4:
             sentences.append(val)
         if len(sentences) >= max_samples:
             break
@@ -98,22 +91,20 @@ def generate_batch(
     if reference_pool:
         examples = random.sample(reference_pool, k=min(6, len(reference_pool)))
         few_shot_block = (
-            "Here are real Hindi sentences from native Hindi speakers (FLEURS). "
-            "These are pure Hindi — your output should follow this Devanagari style "
-            "but ALSO add natural Hinglish code-switching (mix in 1–3 English words). "
-            "Do NOT copy them, generate new ones:\n"
+            "Here are real Mandarin sentences from native Chinese speakers. "
+            "Use them as a style and Hanzi-register guide — do NOT copy them, generate new ones:\n"
             + "\n".join(f"- {s}" for s in examples)
             + "\n\n"
         )
 
     if length_target == "short":
         ask = (
-            f"Generate {batch_size} NEW Hindi sentences (Devanagari, 8–15 words each, "
+            f"Generate {batch_size} NEW Mandarin sentences (Simplified Chinese, 8–15 words each, "
             f"~5 seconds spoken)."
         )
     else:
         ask = (
-            f"Generate {batch_size} NEW Hindi passages (Devanagari, 75–110 words each, "
+            f"Generate {batch_size} NEW Mandarin passages (Simplified Chinese, 75–110 words each, "
             f"~30 seconds spoken). Each passage is one coherent monologue."
         )
 
@@ -151,7 +142,7 @@ def generate_batch(
 @click.option("--batch-size", default=10, help="Sentences per API call")
 @click.option(
     "--lexicon",
-    default="01_text_corpus/lexicons/hindi_common.csv",
+    default="data_generation/01_text_corpus/lexicons/chinese_tonal.csv",
     help="Lexicon CSV path",
 )
 @click.option(
@@ -179,14 +170,12 @@ def main(
     lex = load_lexicon(lexicon)
     terms = [row["term"] for row in lex]
 
-    prompt_path = Path(f"01_text_corpus/prompts/hindi_{length_target}_system.txt")
+    prompt_path = Path(f"data_generation/01_text_corpus/prompts/chinese_{length_target}_system.txt")
     system_prompt = prompt_path.read_text()
 
     reference_pool: list[str] = []
     if not skip_reference:
-        reference_pool = load_reference_sentences(
-            REFERENCE_DATASET, REFERENCE_CONFIG, REFERENCE_MAX_SAMPLES
-        )
+        reference_pool = load_reference_sentences(REFERENCE_DATASET, REFERENCE_MAX_SAMPLES)
         if not reference_pool:
             print("  Proceeding without reference grounding (generation still works).")
 
@@ -197,7 +186,8 @@ def main(
     n_calls = (count // batch_size) + 1
 
     print(
-        f"Generating ~{count} Hindi sentences ({length_target}-form) in {n_calls} API calls..."
+        f"Generating ~{count} Chinese sentences "
+        f"({length_target}-form) in {n_calls} API calls..."
     )
 
     for _ in tqdm(range(n_calls)):
@@ -214,7 +204,7 @@ def main(
 
     with open(output_path, "w") as f:
         for sent in all_sentences:
-            f.write(json.dumps({"text": sent, "language": "hi", "length_target": length_target}) + "\n")
+            f.write(json.dumps({"text": sent, "language": "zh", "length_target": length_target}) + "\n")
 
     print(f"Wrote {len(all_sentences)} sentences to {output_path}")
 

@@ -109,13 +109,13 @@ run_lang_bucket () {
     else
         echo "  [1/4] text gen: $COUNT sentences ($LENGTH)"
         if [[ "$LANG_CODE" == "zh" ]]; then
-            "$PYTHON" 01_text_corpus/generate_chinese.py \
+            "$PYTHON" data_generation/01_text_corpus/generate_chinese.py \
                 --output "$OUT/corpus.jsonl" \
                 --count "$COUNT" --batch-size 10 \
                 --length-target "$LENGTH" \
                 2>&1 | tee "$STAGE_LOG/01_text.log"
         else
-            "$PYTHON" 01_text_corpus/generate_hindi.py \
+            "$PYTHON" data_generation/01_text_corpus/generate_hindi.py \
                 --output "$OUT/corpus.jsonl" \
                 --count "$COUNT" --batch-size 10 \
                 --length-target "$LENGTH" \
@@ -125,7 +125,7 @@ run_lang_bucket () {
 
     # ── 2. TTS synthesis (resumable, parallel) ─────────────────────────
     echo "  [2/4] tts: backend=$BACKEND, workers=$WORKERS, voices/sent=$VOICES_PER_SENT"
-    "$PYTHON" 02_tts_synthesis/synthesize.py \
+    "$PYTHON" data_generation/02_tts_synthesis/synthesize.py \
         --corpus "$OUT/corpus.jsonl" \
         --output-dir "$OUT/clean" \
         --lang "$LANG_CODE" \
@@ -137,16 +137,16 @@ run_lang_bucket () {
 
     # ── 3. Augmentation (1 variant per clean clip) ─────────────────────
     echo "  [3/4] augmentation (1 variant per clean)"
-    "$PYTHON" 03_augmentation/augment.py \
+    "$PYTHON" data_generation/03_augmentation/augment.py \
         --input-dir "$OUT/clean" \
         --output-dir "$OUT/augmented" \
-        --noise-bank 03_augmentation/noise_bank \
+        --noise-bank data_generation/03_augmentation/noise_bank \
         --variants 1 \
         2>&1 | tee "$STAGE_LOG/03_aug.log"
 
     # ── 4. Filter (duration sanity only) + export ──────────────────────
     echo "  [4/4] filter (duration only) + export"
-    "$PYTHON" 04_quality_filter/filter.py \
+    "$PYTHON" data_generation/04_quality_filter/filter.py \
         --input-dir "$OUT" \
         --output "$OUT/manifest_filtered.jsonl" \
         --lang "$LANG_CODE" \
@@ -154,7 +154,7 @@ run_lang_bucket () {
         --skip-whisper \
         2>&1 | tee "$STAGE_LOG/04_filter.log"
 
-    "$PYTHON" 06_dataset_export/export_nemo_manifest.py \
+    "$PYTHON" data_generation/06_dataset_export/export_nemo_manifest.py \
         --input "$OUT/manifest_filtered.jsonl" \
         --output "$OUT/train_manifest.json" \
         2>&1 | tee "$STAGE_LOG/05_export.log"
@@ -184,15 +184,15 @@ elif [[ -z "${HF_REPO_ZH:-}" && -z "${HF_REPO_HI:-}" ]]; then
     echo "  HF_REPO_ZH and HF_REPO_HI not set, skipping push"
     echo "  To push later: HF_REPO_ZH=<org>/synthetic-asr-zh \\"
     echo "                 HF_REPO_HI=<org>/synthetic-asr-hi \\"
-    echo "                 $PYTHON 07_hf_push/push_to_hf.py --lang zh --repo-id <...>"
+    echo "                 $PYTHON data_generation/07_hf_push/push_to_hf.py --lang zh --repo-id <...>"
 else
     if [[ -n "${HF_REPO_ZH:-}" ]]; then
         echo "  pushing zh to $HF_REPO_ZH"
-        "$PYTHON" 07_hf_push/push_to_hf.py --lang zh --repo-id "$HF_REPO_ZH" 2>&1 | tee "$LOG_DIR/06_hf_zh.log"
+        "$PYTHON" data_generation/07_hf_push/push_to_hf.py --lang zh --repo-id "$HF_REPO_ZH" 2>&1 | tee "$LOG_DIR/06_hf_zh.log"
     fi
     if [[ -n "${HF_REPO_HI:-}" ]]; then
         echo "  pushing hi to $HF_REPO_HI"
-        "$PYTHON" 07_hf_push/push_to_hf.py --lang hi --repo-id "$HF_REPO_HI" 2>&1 | tee "$LOG_DIR/06_hf_hi.log"
+        "$PYTHON" data_generation/07_hf_push/push_to_hf.py --lang hi --repo-id "$HF_REPO_HI" 2>&1 | tee "$LOG_DIR/06_hf_hi.log"
     fi
 fi
 
