@@ -35,8 +35,6 @@ try {
 # 4. Replace placeholder in metadata JSONs
 Write-Host "Configuring metadata files..." -ForegroundColor Cyan
 $metaFiles = @(
-    "outputs\hf_datasets\synthetic-asr-hi\dataset-metadata.json",
-    "outputs\hf_datasets\synthetic-asr-zh\dataset-metadata.json",
     "kaggle_job\kernel-metadata.json"
 )
 
@@ -51,14 +49,7 @@ foreach ($file in $metaFiles) {
     }
 }
 
-# 5. Push Datasets to Kaggle
-Write-Host "Uploading synthetic-asr-hi dataset to Kaggle..." -ForegroundColor Cyan
-kaggle datasets create -p outputs\hf_datasets\synthetic-asr-hi
-
-Write-Host "Uploading synthetic-asr-zh dataset to Kaggle..." -ForegroundColor Cyan
-kaggle datasets create -p outputs\hf_datasets\synthetic-asr-zh
-
-# 6. Push Kernel to Kaggle
+# 5. Push Kernel to Kaggle
 Write-Host "Pushing training kernel to Kaggle..." -ForegroundColor Cyan
 kaggle kernels push -p kaggle_job
 
