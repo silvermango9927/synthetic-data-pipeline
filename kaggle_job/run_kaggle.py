@@ -46,7 +46,9 @@ os.environ["HF_TOKEN"] = hf_token
 print("Cloning private repository...")
 subprocess.run(f"git clone -b benchmark/scaling-laws-results https://{pat_token}@github.com/silvermango9927/synthetic-data-pipeline.git", shell=True)
 
-
+# 5. Clone public Hugging Face dataset (containing all WAV files)
+print("Cloning Hugging Face dataset (this may take 1-2 mins)...")
+subprocess.run("git clone https://huggingface.co/datasets/silvermango9927/synthetic-asr-hi synthetic-data-pipeline/outputs/hf_datasets/synthetic-asr-hi", shell=True)
 
 # 6. Change directory and run the training sweep
 os.chdir("synthetic-data-pipeline")
