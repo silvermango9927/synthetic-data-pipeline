@@ -67,6 +67,12 @@ def run_scaling_sweep(
         
     results = []
     
+    # Save statistics paths
+    stats_dir = "outputs/benchmark/stats"
+    os.makedirs(stats_dir, exist_ok=True)
+    csv_path = os.path.join(stats_dir, f"scaling_{lang}_{model_type}_{data_type}.csv")
+    plot_path = os.path.join(stats_dir, f"scaling_{lang}_{model_type}_{data_type}.png")
+    
     for f in fractions:
         print(f"\n>>> Running Sweep for Fraction: {f:.1%} <<<")
         sub_clips = int(total_clips * f)
@@ -117,41 +123,51 @@ def run_scaling_sweep(
             "CER": cer
         })
         
-    # Save statistics table
-    stats_dir = "outputs/benchmark/stats"
-    os.makedirs(stats_dir, exist_ok=True)
-    csv_path = os.path.join(stats_dir, f"scaling_{lang}_{model_type}_{data_type}.csv")
-    
-    with open(csv_path, "w", newline="") as f_csv:
-        writer = csv.DictWriter(f_csv, fieldnames=["Fraction", "Total_Clips", "Hours", "Train_Loss", "WER", "CER"])
-        writer.writeheader()
-        writer.writerows(results)
+        # Save statistics table immediately
+        with open(csv_path, "w", newline="") as f_csv:
+            writer = csv.DictWriter(f_csv, fieldnames=["Fraction", "Total_Clips", "Hours", "Train_Loss", "WER", "CER"])
+            writer.writeheader()
+            writer.writerows(results)
+            
+        print(f"\nScaling results successfully saved/updated to {csv_path}")
+        print("\n================== SCALING LAW SUMMARY ==================")
+        df = pd.DataFrame(results)
+        print(df.to_markdown(index=False))
+        print("=========================================================\n")
         
-    print(f"\nScaling results successfully saved to {csv_path}")
-    print("\n================== SCALING LAW SUMMARY ==================")
-    df = pd.DataFrame(results)
-    print(df.to_markdown(index=False))
-    print("=========================================================\n")
-    
-    # 5. Plot scaling curves using matplotlib
-    try:
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(10, 6))
-        plt.plot(df["Hours"], df["WER"] * 100, marker='o', linewidth=2, label="WER (%)", color="crimson")
-        plt.plot(df["Hours"], df["CER"] * 100, marker='s', linewidth=2, label="CER (%)", color="royalblue")
-        
-        plt.title(f"VALSEA ASR Scaling Laws - {lang.upper()} ({model_type.upper()} on {data_type.upper()})", fontsize=14, fontweight='bold')
-        plt.xlabel("Dataset Size (Hours of Audio)", fontsize=12)
-        plt.ylabel("Error Rate (%)", fontsize=12)
-        plt.grid(True, linestyle="--", alpha=0.6)
-        plt.legend(fontsize=11)
-        
-        plot_path = os.path.join(stats_dir, f"scaling_{lang}_{model_type}_{data_type}.png")
-        plt.savefig(plot_path, dpi=300, bbox_inches="tight")
-        print(f"Scaling laws visualization curve plotted at {plot_path}")
-    except Exception as e:
-        print(f"[WARN] Matplotlib plotting failed: {e}")
-        
+        # Plot scaling curves immediately
+        try:
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 6))
+            plt.plot(df["Hours"], df["WER"] * 100, marker='o', linewidth=2, label="WER (%)", color="crimson")
+            plt.plot(df["Hours"], df["CER"] * 100, marker='s', linewidth=2, label="CER (%)", color="royalblue")
+            
+            plt.title(f"VALSEA ASR Scaling Laws - {lang.upper()} ({model_type.upper()} on {data_type.upper()})", fontsize=14, fontweight='bold')
+            plt.xlabel("Dataset Size (Hours of Audio)", fontsize=12)
+            plt.ylabel("Error Rate (%)", fontsize=12)
+            plt.grid(True, linestyle="--", alpha=0.6)
+            plt.legend(fontsize=11)
+            
+            plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            print(f"Scaling laws visualization curve plotted/updated at {plot_path}")
+        except Exception as e:
+            print(f"[WARN] Matplotlib plotting failed: {e}")
+            
+        # 5. Git Commit & Push immediately
+        import subprocess
+        try:
+            subprocess.run(["git", "config", "user.email", "kaggle-worker@gemini.ai"], check=False)
+            subprocess.run(["git", "config", "user.name", "Kaggle Worker"], check=False)
+            
+            subprocess.run(["git", "add", csv_path, plot_path], check=True)
+            commit_msg = f"chore: auto-update scaling sweep results for fraction {f:.1%}"
+            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+            subprocess.run(["git", "push", "origin", "benchmark/scaling-laws-results"], check=True)
+            print(f"🚀 Successfully pushed results for fraction {f:.1%} to GitHub!")
+        except Exception as git_err:
+            print(f"[WARN] Failed to auto-push results to GitHub: {git_err}")
+            
     return results
 
 @click.command()
