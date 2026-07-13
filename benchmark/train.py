@@ -100,14 +100,14 @@ def train_asr(cfg: TrainConfig):
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit) else torch.float32,
+            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit or cfg.fp16) else torch.float32,
             **quant_kwargs
         )
     else:  # whisper
         model = WhisperForConditionalGeneration.from_pretrained(
             cfg.model_name,
             device_map=device_map,
-            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit) else torch.float32,
+            torch_dtype=torch.float16 if (cfg.load_in_8bit or cfg.load_in_4bit or cfg.fp16) else torch.float32,
             **quant_kwargs
         )
         # Configure model generation configs
