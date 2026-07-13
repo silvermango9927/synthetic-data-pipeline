@@ -25,7 +25,6 @@ outputs/hf_datasets/
 # Scratch/debug files
 outputs/test_*.py
 outputs/test_*.txt
-
 # Kaggle secrets
 *github_pat.txt
 *hf_token.txt
@@ -35,3 +34,6 @@ outputs/test_*.txt
 *.log.attempt*
 logs/
 outputs.*/
+
+# Cache directory
+outputs/benchmark/cache/
