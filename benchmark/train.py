@@ -60,7 +60,8 @@ def train_asr(cfg: TrainConfig):
     
     preprocess_fn = get_preprocess_fn(processor, cfg.model_type)
     print("Preprocessing datasets (extracting speech features and tokenizing text)...")
-    num_proc = max(1, os.cpu_count())
+    # Multiprocessing (num_proc > 1) deadlocks on Kaggle/Linux when loading audio (libsndfile is not fork-safe)
+    num_proc = 1
     tokenized_dataset = dataset.map(
         preprocess_fn,
         remove_columns=dataset["train"].column_names,
