@@ -25,6 +25,7 @@ from pathlib import Path
 GEN = {
     "zh": "data_generation/01_text_corpus/generate_chinese.py",
     "hi": "data_generation/01_text_corpus/generate_hindi.py",
+    "vi": "data_generation/01_text_corpus/generate_vietnamese.py",
 }
 
 
@@ -44,7 +45,7 @@ def load_texts(path: Path) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--lang", required=True, choices=("zh", "hi"))
+    ap.add_argument("--lang", required=True, choices=("zh", "hi", "vi"))
     ap.add_argument("--corpus", required=True, help="Corpus JSONL to grow in place")
     ap.add_argument("--target", type=int, required=True, help="Target unique transcript count")
     ap.add_argument("--length-target", default="long", choices=("short", "long"))
