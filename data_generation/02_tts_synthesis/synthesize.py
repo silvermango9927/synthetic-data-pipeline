@@ -140,7 +140,10 @@ def synthesize_edge_tts(
         # edge-tts outputs MP3; soundfile needs WAV — save to tmp then convert
         tmp_path = output_path.with_suffix(".mp3")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        await communicate.save(str(tmp_path))
+        # edge-tts has no built-in timeout: a stalled network stream would hang
+        # this worker thread forever and wedge the whole pool. Cap it so a hung
+        # request raises (caught below -> returns False -> retried on --resume).
+        await asyncio.wait_for(communicate.save(str(tmp_path)), timeout=90.0)
 
         # Convert MP3 → WAV at 16kHz mono
         import librosa

@@ -57,7 +57,7 @@ except ImportError as e:  # pragma: no cover
 
 
 VAL_FRACTION = 0.05
-LANG_DIRNAME = {"zh": "chinese", "hi": "hindi"}
+LANG_DIRNAME = {"zh": "chinese", "hi": "hindi", "vi": "vietnamese"}
 BUCKETS = ("short", "long")
 AUG_STATES = ("clean", "augmented")
 
@@ -327,7 +327,7 @@ def push(
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--lang", required=True, choices=("zh", "hi"), help="Language code")
+    ap.add_argument("--lang", required=True, choices=("zh", "hi", "vi"), help="Language code")
     ap.add_argument("--repo-id", required=True, help="HF dataset repo id, e.g. valsea/synthetic-asr-zh")
     ap.add_argument(
         "--outputs-root",
