@@ -1,4 +1,4 @@
-# VALSEA ASR Data Generation Pipeline
+# ASR Data Generation Pipeline
 
 Generates synthetic training data for finetuning:
 - **Blaze** (Vietnamese ASR) — edge-tts / Fish Speech
